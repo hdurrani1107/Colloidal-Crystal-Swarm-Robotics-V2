@@ -132,13 +132,18 @@ class multi_agent:
                 #    elif offset[dim] < -0.5 * box_length:
                 #        offset[dim] += box_length
 
-                #############################################
+
                 dist = np.linalg.norm(offset)
                 #This is an error: I don't know why I changed this but effectively
                 #Once it hits the optimal distance it stops the lj-potential.
                 #So all it wants to do is repel.
                 #Updated: Converted it all the vector notation
                 #if dist < distance and dist > 1e-3:
+                
+                ##############################
+                # LJ Force Potential
+                ##############################
+
                 if dist > 1e-5:
                     inv_r = 1.0 / dist
                     inv_r6 = (sigma * inv_r) ** 6
@@ -147,6 +152,10 @@ class multi_agent:
                     total_force += lj_scalar * (offset / dist)
                     #total_force += lj_force
             #if not is_liquid:
+
+            ##############################
+            # Gamma Force
+            ##############################
             objective = gamma_pos - pos_i
             u_gamma = c1_gamma * sigma_1(objective) - c2_gamma * vel_i
             total_force += u_gamma
@@ -164,7 +173,11 @@ class multi_agent:
             #repulsion_strength = 1.0
             #x, y = self.agents[i, :2]
             #f = forces[i]
-            
+
+            ############################
+            #Langevin Thermostat Velocity Update
+            ############################
+
             mass = 1
             friction = 3
             kB = 1
@@ -188,9 +201,11 @@ class multi_agent:
             #Broken piece of code but does the pbc
             #box_length = self.bounds[1] - self.bounds[0]
             #self.agents[i, :2] = (self.agents[i, :2] - self.bounds[0]) % box_length + self.bounds[0]
-
+            
+            ############################
             #Hard Edge Boundary
-            # --- Boundary Check and Bounce ---
+            ############################
+
             x, y = self.agents[i, :2]
 
             if x < 0:

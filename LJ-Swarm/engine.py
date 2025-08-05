@@ -238,17 +238,17 @@ class multi_agent:
 
             x, y = self.agents[i, :2]
 
-            if x < 0:
+            if x < self.bounds[0]:
                 self.agents[i, 0] = self.bounds[0]
                 self.agents[i, 2] *= -1
-            elif x > 700:
+            elif x > self.bounds[1]:
                 self.agents[i, 0] = self.bounds[1]
                 self.agents[i, 2] *= -1
 
-            if y < 0:
+            if y < self.bounds[0]:
                 self.agents[i, 1] = self.bounds[0]
                 self.agents[i, 3] *= -1
-            elif y > 700:
+            elif y > self.bounds[1]:
                 self.agents[i, 1] = self.bounds[1]
                 self.agents[i, 3] *= -1 
 

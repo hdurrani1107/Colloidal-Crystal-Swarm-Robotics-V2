@@ -101,20 +101,31 @@ def create_update_function(sim, temperature_schedule, sample_time, sigma, epsilo
         kinetic_temperatures.append(T_kin)
         time_log.append(frame * sample_time)
 
-        # Update goal visibility based on agent proximity
+        # Update goal visibility based on discovery state
         if sim.goal and goal_marker and trap_circle:
-            # Reset detection for this frame
-            sim.goal.reset_detection()
+            # Reset per-frame data
+            sim.goal.reset_frame_data()
             
-            # Check each agent for detection
+            # Process all agents for discovery/trapping
             for i, pos in enumerate(positions):
-                sim.goal.process_agent(i, pos, velocities[i], c1_gamma, c2_gamma)
+                sim.goal.process_agent_discovery(i, pos, velocities[i], c1_gamma, c2_gamma)
             
-            # Show/hide goal based on visibility
+            # Show/hide goal based on discovery state
             if sim.goal.is_goal_visible():
                 goal_marker.set_data([gamma_pos[0]], [gamma_pos[1]])
                 trap_circle.set_radius(sim.goal.trap_radius)
                 trap_circle.set_visible(True)
+                
+                # Change colors based on broadcasting state
+                if sim.goal.is_broadcasting:
+                    goal_marker.set_color('red')  # Broadcasting = red
+                    trap_circle.set_color('red')
+                elif sim.goal.is_full:
+                    goal_marker.set_color('orange')  # Full = orange
+                    trap_circle.set_color('orange')
+                else:
+                    goal_marker.set_color('purple')  # Default = purple
+                    trap_circle.set_color('purple')
             else:
                 goal_marker.set_data([], [])
                 trap_circle.set_visible(False)
@@ -122,10 +133,10 @@ def create_update_function(sim, temperature_schedule, sample_time, sigma, epsilo
         scat.set_offsets(positions)
         scat.set_facecolor(colors)
         
-        # Add trapped agent count to title if goal exists
+        # Add goal status to title if goal exists
         if sim.goal:
-            trapped_count = sim.goal.get_trapped_count()
-            title.set_text(f"Frame {frame} | Temp = {temp:.1f} | Trapped: {trapped_count}")
+            status = sim.goal.get_status_string()
+            title.set_text(f"Frame {frame} | Temp = {temp:.1f} | Goal: {status}")
         else:
             title.set_text(f"Frame {frame} | Temp = {temp:.1f}")
             

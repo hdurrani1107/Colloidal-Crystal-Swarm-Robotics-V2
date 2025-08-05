@@ -37,11 +37,12 @@ c1_gamma = 10
 c2_gamma = 10
 gamma_pos = np.array([30, 30])
 
-# Invisible Goal Configuration
+# Discovery-Based Goal Configuration
 goal_config = {
-    'detection_radius': 8.0,    # radius where goal becomes visible
+    'detection_radius': 8.0,    # radius for discovery (stumbling upon goal)
     'trap_strength': 25.0,      # multiplier for gamma force when trapped
-    'trap_radius': 5.0          # radius for trap (smaller than detection)
+    'trap_radius': 5.0,         # radius for trap (smaller than detection)
+    'max_capacity': 10          # max agents before broadcasting stops
 }
 n_frames = 30000
 max_temp = 150

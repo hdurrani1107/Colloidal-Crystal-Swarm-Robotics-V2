@@ -96,12 +96,13 @@ class multi_agent:
         #self.agents = init_grid_random_no_overlap(number, bounds, spacing)
     
     def setup_goal(self, gamma_pos, goal_config):
-        """Set up the invisible goal system"""
+        """Set up the discovery-based goal system"""
         self.goal = InvisibleGoal(
             gamma_pos=gamma_pos,
             detection_radius=goal_config['detection_radius'],
             trap_strength=goal_config['trap_strength'],
-            trap_radius=goal_config.get('trap_radius')
+            trap_radius=goal_config.get('trap_radius'),
+            max_capacity=goal_config.get('max_capacity', 10)
         )
     
     def compute_neighbor_count(self, i, radius):
@@ -181,23 +182,13 @@ class multi_agent:
                         total_force += (repulsion_strength * overlap / dist_to_obs) * (obs_vec)
 
             ##############################
-            # Gamma Force (with Goal System)
+            # Goal Broadcasting System (Discovery-Based)
             ##############################
             if self.goal:
-                use_normal, enhanced_force, _ = self.goal.process_agent(i, pos_i, vel_i, c1_gamma, c2_gamma)
-                if use_normal:
-                    # Normal gamma force
-                    objective = gamma_pos - pos_i
-                    u_gamma = c1_gamma * sigma_1(objective) - c2_gamma * vel_i
-                    total_force += u_gamma
-                else:
-                    # Enhanced trap force
-                    total_force += enhanced_force
-            else:
-                # Fallback to original gamma behavior
-                objective = gamma_pos - pos_i
-                u_gamma = c1_gamma * sigma_1(objective) - c2_gamma * vel_i
-                total_force += u_gamma
+                # Check if agent discovers the goal (enters detection radius)
+                goal_force = self.goal.process_agent_discovery(i, pos_i, vel_i, c1_gamma, c2_gamma)
+                total_force += goal_force
+            # NO gamma force when goal system is active - pure exploration via LJ + Langevin
 
             forces[i] = total_force
 

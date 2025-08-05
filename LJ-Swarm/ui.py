@@ -57,19 +57,25 @@ def setup_visualization(bounds, obstacles, gamma_pos):
             circle = plt.Circle(pos, radius, color='gray', alpha=0.4)
             ax.add_patch(circle)
 
-    #Gamma_Pos Input
+    # Goal visualization elements (initially hidden)
+    goal_marker = None
+    trap_circle = None
     if gamma_pos is not None:
-        ax.plot(gamma_pos[0], gamma_pos[1], marker='*', color='purple', markersize=5, label='Goal')
-        #ax.legend(loc="upper right", fontsize="small", frameon=False)
+        # Goal marker (initially hidden)
+        goal_marker = ax.plot([], [], marker='*', color='purple', markersize=8, label='Goal')[0]
+        # Trap radius circle (initially hidden, dotted line)
+        trap_circle = plt.Circle(gamma_pos, 0, fill=False, color='purple', 
+                               linestyle='--', alpha=0.6, linewidth=2)
+        ax.add_patch(trap_circle)
     
-    return fig, ax, scat, title
+    return fig, ax, scat, title, goal_marker, trap_circle
 
 ############################
 # Updates entire frame
 ############################
 
 def create_update_function(sim, temperature_schedule, sample_time, sigma, epsilon, distance, c1_gamma, c2_gamma, gamma_pos, alpha,
-                           scat, title, kinetic_temperatures, time_log):
+                           scat, title, kinetic_temperatures, time_log, goal_marker=None, trap_circle=None):
     counter = [0]
 
     def compute_kinetic_temperature(agents, mass=1, kB=1):
@@ -95,11 +101,44 @@ def create_update_function(sim, temperature_schedule, sample_time, sigma, epsilo
         kinetic_temperatures.append(T_kin)
         time_log.append(frame * sample_time)
 
+        # Update goal visibility based on agent proximity
+        if sim.goal and goal_marker and trap_circle:
+            # Reset detection for this frame
+            sim.goal.reset_detection()
+            
+            # Check each agent for detection
+            for i, pos in enumerate(positions):
+                sim.goal.process_agent(i, pos, velocities[i], c1_gamma, c2_gamma)
+            
+            # Show/hide goal based on visibility
+            if sim.goal.is_goal_visible():
+                goal_marker.set_data([gamma_pos[0]], [gamma_pos[1]])
+                trap_circle.set_radius(sim.goal.trap_radius)
+                trap_circle.set_visible(True)
+            else:
+                goal_marker.set_data([], [])
+                trap_circle.set_visible(False)
+
         scat.set_offsets(positions)
         scat.set_facecolor(colors)
-        title.set_text(f"Frame {frame} | Temp = {temp:.1f}")
+        
+        # Add trapped agent count to title if goal exists
+        if sim.goal:
+            trapped_count = sim.goal.get_trapped_count()
+            title.set_text(f"Frame {frame} | Temp = {temp:.1f} | Trapped: {trapped_count}")
+        else:
+            title.set_text(f"Frame {frame} | Temp = {temp:.1f}")
+            
         counter[0] += 1
-        return scat, title
+        
+        # Return all animated elements
+        return_elements = [scat, title]
+        if goal_marker:
+            return_elements.append(goal_marker)
+        if trap_circle:
+            return_elements.append(trap_circle)
+        
+        return return_elements
     
     return update
 

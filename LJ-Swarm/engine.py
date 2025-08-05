@@ -10,6 +10,7 @@
 # Importing Libraries
 ##########################
 import numpy as np
+from goal import InvisibleGoal
 
 ##########################
 # Multi-Agent Setup
@@ -89,9 +90,19 @@ class multi_agent:
         self.dt = sampletime
         self.bounds = bounds
         self.obstacles = obstacles
+        self.goal = None  # Will be set up later if needed
         spacing = (2**(1/6)) * sigma
         self.agents = init_grid(number, bounds, spacing)
         #self.agents = init_grid_random_no_overlap(number, bounds, spacing)
+    
+    def setup_goal(self, gamma_pos, goal_config):
+        """Set up the invisible goal system"""
+        self.goal = InvisibleGoal(
+            gamma_pos=gamma_pos,
+            detection_radius=goal_config['detection_radius'],
+            trap_strength=goal_config['trap_strength'],
+            trap_radius=goal_config.get('trap_radius')
+        )
     
     def compute_neighbor_count(self, i, radius):
         pos_i = self.agents[i, :2]
@@ -170,11 +181,23 @@ class multi_agent:
                         total_force += (repulsion_strength * overlap / dist_to_obs) * (obs_vec)
 
             ##############################
-            # Gamma Force
+            # Gamma Force (with Goal System)
             ##############################
-            objective = gamma_pos - pos_i
-            u_gamma = c1_gamma * sigma_1(objective) - c2_gamma * vel_i
-            total_force += u_gamma
+            if self.goal:
+                use_normal, enhanced_force, _ = self.goal.process_agent(i, pos_i, vel_i, c1_gamma, c2_gamma)
+                if use_normal:
+                    # Normal gamma force
+                    objective = gamma_pos - pos_i
+                    u_gamma = c1_gamma * sigma_1(objective) - c2_gamma * vel_i
+                    total_force += u_gamma
+                else:
+                    # Enhanced trap force
+                    total_force += enhanced_force
+            else:
+                # Fallback to original gamma behavior
+                objective = gamma_pos - pos_i
+                u_gamma = c1_gamma * sigma_1(objective) - c2_gamma * vel_i
+                total_force += u_gamma
 
             forces[i] = total_force
 

@@ -36,8 +36,15 @@ alpha = 0.5
 c1_gamma = 10 
 c2_gamma = 10
 gamma_pos = np.array([30, 30])
-n_frames = 20000
-max_temp = 100
+
+# Invisible Goal Configuration
+goal_config = {
+    'detection_radius': 8.0,    # radius where goal becomes visible
+    'trap_strength': 25.0,      # multiplier for gamma force when trapped
+    'trap_radius': 5.0          # radius for trap (smaller than detection)
+}
+n_frames = 30000
+max_temp = 150
 counter = 0
 temperature_schedule = schedule.temp_schedule_1(max_temp, n_frames)
 obstacles = [
@@ -51,6 +58,7 @@ obstacles = [
 ##########################
 
 sim = multi_agent(agents, sigma, sample_time, bounds, obstacles)
+sim.setup_goal(gamma_pos, goal_config)
 
 #Melted Initial Condition
 #initial_temperature = 50
@@ -58,8 +66,8 @@ sim = multi_agent(agents, sigma, sample_time, bounds, obstacles)
 
 ##########################
 # Visualization
-##########################
-fig, ax, scat, title = setup_visualization(bounds, obstacles, gamma_pos)
+###########################
+fig, ax, scat, title, goal_marker, trap_circle = setup_visualization(bounds, obstacles, gamma_pos)
 norm = Normalize(vmin=0, vmax=50)
 scat.set_norm(norm)
 
@@ -75,7 +83,7 @@ time_log = []
 update = create_update_function(
     sim, temperature_schedule, sample_time, sigma, epsilon,
     distance, c1_gamma, c2_gamma, gamma_pos, alpha, scat, 
-    title, kinetic_temperature, time_log
+    title, kinetic_temperature, time_log, goal_marker, trap_circle
 )
 
 ############################

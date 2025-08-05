@@ -42,7 +42,7 @@ def classify_state(KE):
 # Init Scatter Plot
 ############################
 
-def setup_visualization(bounds):
+def setup_visualization(bounds, obstacles, gamma_pos):
     fig, ax = plt.subplots(figsize=(5, 5))
     ax.set_xlim(bounds)
     ax.set_ylim(bounds)
@@ -50,6 +50,18 @@ def setup_visualization(bounds):
     ax.set_aspect('equal', adjustable='box')
     scat = ax.scatter([], [], s=10, animated=True, edgecolors='none')
     title = ax.text(0.02, 1.02, '', transform=ax.transAxes)
+
+    #Obstacles Input
+    if obstacles:
+        for pos, radius in obstacles:
+            circle = plt.Circle(pos, radius, color='gray', alpha=0.4)
+            ax.add_patch(circle)
+
+    #Gamma_Pos Input
+    if gamma_pos is not None:
+        ax.plot(gamma_pos[0], gamma_pos[1], marker='*', color='purple', markersize=5, label='Goal')
+        #ax.legend(loc="upper right", fontsize="small", frameon=False)
+    
     return fig, ax, scat, title
 
 ############################

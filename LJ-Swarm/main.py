@@ -19,7 +19,7 @@ import matplotlib.cm as cm
 from matplotlib.colors import Normalize
 from tqdm import tqdm
 from engine import multi_agent, init_melt
-from schedule import temp_schedule_1
+import schedule
 from ui import setup_visualization, create_update_function
 
 ##########################
@@ -28,24 +28,29 @@ from ui import setup_visualization, create_update_function
 
 agents = 50
 sigma = 3.0
-epsilon = 3.0
+epsilon = 3.0 
 sample_time = 0.005
 bounds = [0, 45]
 distance = (2 ** (1 / 6)) * sigma
 alpha = 0.5
 c1_gamma = 10 
 c2_gamma = 10
-gamma_pos = np.array([45/2, 45/2])
+gamma_pos = np.array([30, 30])
 n_frames = 20000
-max_temp = 0
+max_temp = 100
 counter = 0
-temperature_schedule = temp_schedule_1(max_temp, n_frames)
+temperature_schedule = schedule.temp_schedule_1(max_temp, n_frames)
+obstacles = [
+    (np.array([22.5, 22.5]), 5),  # center sphere
+    (np.array([10, 35]), 3),
+    (np.array([35, 10]), 3)
+]
 
 ##########################
 # Init Sim
 ##########################
 
-sim = multi_agent(agents, sigma, sample_time, bounds)
+sim = multi_agent(agents, sigma, sample_time, bounds, obstacles)
 
 #Melted Initial Condition
 #initial_temperature = 50
@@ -54,7 +59,7 @@ sim = multi_agent(agents, sigma, sample_time, bounds)
 ##########################
 # Visualization
 ##########################
-fig, ax, scat, title = setup_visualization(bounds)
+fig, ax, scat, title = setup_visualization(bounds, obstacles, gamma_pos)
 norm = Normalize(vmin=0, vmax=50)
 scat.set_norm(norm)
 

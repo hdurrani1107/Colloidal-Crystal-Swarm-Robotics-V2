@@ -27,7 +27,7 @@ def init_melt(agents, init_temp, mass=1, kB=1):
     std_dev = np.sqrt(kB * init_temp / mass)
     agents[:, 2:] = np.random.normal(0, std_dev, size=(N, 2))
 
-def init_grid(n, bounds, spacing, center=(22.5, 22.5)):
+def init_grid(n, bounds, spacing, center=(10, 10)):
     agents = []
     cols = int(np.sqrt(n))
     rows = int(np.ceil(n / cols))
@@ -85,12 +85,13 @@ def init_grid_random_no_overlap(n, bounds, spacing, max_attempts=10000):
 
 class multi_agent:
 
-    def __init__(self, number, sigma, sampletime, bounds):
+    def __init__(self, number, sigma, sampletime, bounds, obstacles):
         self.dt = sampletime
         self.bounds = bounds
+        self.obstacles = obstacles
         spacing = (2**(1/6)) * sigma
-        #self.agents = init_grid(number, bounds, spacing)
-        self.agents = init_grid_random_no_overlap(number, bounds, spacing)
+        self.agents = init_grid(number, bounds, spacing)
+        #self.agents = init_grid_random_no_overlap(number, bounds, spacing)
     
     def compute_neighbor_count(self, i, radius):
         pos_i = self.agents[i, :2]
@@ -152,6 +153,21 @@ class multi_agent:
                     total_force += lj_scalar * (offset / dist)
                     #total_force += lj_force
             #if not is_liquid:
+
+
+            ##############################
+            # LJ Force Potential
+            ##############################
+
+            if self.obstacles:
+                for obs_pos, obs_radius in self.obstacles:
+                    obs_vec = pos_i - obs_pos
+                    dist_to_obs = np.linalg.norm(obs_vec)
+                    overlap = obs_radius + 1.5 * sigma - dist_to_obs  # soft repulsion zone
+
+                    if overlap > 0:
+                        repulsion_strength = 100  # tune this
+                        total_force += (repulsion_strength * overlap / dist_to_obs) * (obs_vec)
 
             ##############################
             # Gamma Force

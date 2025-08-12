@@ -17,7 +17,7 @@ from matplotlib.animation import FuncAnimation
 import matplotlib.cm as cm
 from matplotlib.colors import Normalize
 
-############################
+############################ 
 # Phase Change Color Update
 ############################
 state_colors = np.array([
@@ -31,7 +31,7 @@ state_colors = np.array([
 ############################
 
 def classify_state(KE):
-    if KE < 10:
+    if KE < 10: 
         return 0  # solid
     elif KE < 50:
         return 1  # liquid
@@ -42,11 +42,11 @@ def classify_state(KE):
 # Init Scatter Plot
 ############################
 
-def setup_visualization(bounds, obstacles, gamma_pos):
+def setup_visualization(bounds, obstacles):
     fig, ax = plt.subplots(figsize=(5, 5))
     ax.set_xlim(bounds)
     ax.set_ylim(bounds)
-    #Equal Aspect Ratio
+    #Equal Aspect Ratio 
     ax.set_aspect('equal', adjustable='box')
     scat = ax.scatter([], [], s=10, animated=True, edgecolors='none')
     title = ax.text(0.02, 1.02, '', transform=ax.transAxes)
@@ -57,25 +57,17 @@ def setup_visualization(bounds, obstacles, gamma_pos):
             circle = plt.Circle(pos, radius, color='gray', alpha=0.4)
             ax.add_patch(circle)
 
-    # Goal visualization elements (initially hidden)
-    goal_marker = None
-    trap_circle = None
-    if gamma_pos is not None:
-        # Goal marker (initially hidden)
-        goal_marker = ax.plot([], [], marker='*', color='purple', markersize=8, label='Goal')[0]
-        # Trap radius circle (initially hidden, dotted line)
-        trap_circle = plt.Circle(gamma_pos, 0, fill=False, color='purple', 
-                               linestyle='--', alpha=0.6, linewidth=2)
-        ax.add_patch(trap_circle)
-    
-    return fig, ax, scat, title, goal_marker, trap_circle
+    # Cooling zone visualization elements
+    cooling_zone_circles = []
+
+    return fig, ax, scat, title, cooling_zone_circles
 
 ############################
 # Updates entire frame
 ############################
 
-def create_update_function(sim, temperature_schedule, sample_time, sigma, epsilon, distance, c1_gamma, c2_gamma, gamma_pos, alpha,
-                           scat, title, kinetic_temperatures, time_log, goal_marker=None, trap_circle=None):
+def create_update_function(sim, temperature_schedule, sample_time, sigma, epsilon, distance, c1_gamma, c2_gamma, alpha,
+                           scat, title, kinetic_temperatures, time_log, cooling_zone_circles, ax):
     counter = [0]
 
     def compute_kinetic_temperature(agents, mass=1, kB=1):
@@ -86,7 +78,7 @@ def create_update_function(sim, temperature_schedule, sample_time, sigma, epsilo
 
     def update(frame):
         temp = temperature_schedule[frame]
-        forces = sim.compute_forces(sigma, epsilon, distance, temp, c1_gamma, c2_gamma, gamma_pos, alpha)
+        forces = sim.compute_forces(sigma, epsilon, distance, temp, c1_gamma, c2_gamma, alpha)
         sim.update(forces, temp)
         positions = sim.agents[:, :2]
         velocities = sim.agents[:, 2:]
@@ -101,53 +93,49 @@ def create_update_function(sim, temperature_schedule, sample_time, sigma, epsilo
         kinetic_temperatures.append(T_kin)
         time_log.append(frame * sample_time)
 
-        # Update goal visibility based on discovery state
-        if sim.goal and goal_marker and trap_circle:
-            # Reset per-frame data
-            sim.goal.reset_frame_data()
+        # Update cooling zone visualization
+        if sim.cooling_zones:
+            # Remove old cooling zone circles
+            for circle in cooling_zone_circles:
+                circle.remove()
+            cooling_zone_circles.clear()
             
-            # Process all agents for discovery/trapping
-            for i, pos in enumerate(positions):
-                sim.goal.process_agent_discovery(i, pos, velocities[i], c1_gamma, c2_gamma)
-            
-            # Show/hide goal based on discovery state
-            if sim.goal.is_goal_visible():
-                goal_marker.set_data([gamma_pos[0]], [gamma_pos[1]])
-                trap_circle.set_radius(sim.goal.trap_radius)
-                trap_circle.set_visible(True)
-                
-                # Change colors based on broadcasting state
-                if sim.goal.is_broadcasting:
-                    goal_marker.set_color('red')  # Broadcasting = red
-                    trap_circle.set_color('red')
-                elif sim.goal.is_full:
-                    goal_marker.set_color('orange')  # Full = orange
-                    trap_circle.set_color('orange')
+            # Add current cooling zones
+            active_zones = sim.cooling_zones.get_active_zones()
+            if frame < 10:  # Debug print for first few frames
+                print(f"Frame {frame}: {len(active_zones)} active zones")
+            for zone_pos, zone_radius, num_agents in active_zones:
+                # Color based on number of trapped agents
+                if num_agents == 0:
+                    color = 'cyan'
+                    zone_alpha = 0.3
+                elif num_agents <= 3:
+                    color = 'blue'
+                    zone_alpha = 0.5
                 else:
-                    goal_marker.set_color('purple')  # Default = purple
-                    trap_circle.set_color('purple')
-            else:
-                goal_marker.set_data([], [])
-                trap_circle.set_visible(False)
+                    color = 'darkblue'
+                    zone_alpha = 0.7
+                
+                circle = plt.Circle(zone_pos, zone_radius, fill=False, color=color, 
+                                  linestyle='-', alpha=zone_alpha, linewidth=3)
+                ax.add_patch(circle)
+                cooling_zone_circles.append(circle)
 
         scat.set_offsets(positions)
         scat.set_facecolor(colors)
         
-        # Add goal status to title if goal exists
-        if sim.goal:
-            status = sim.goal.get_status_string()
-            title.set_text(f"Frame {frame} | Temp = {temp:.1f} | Goal: {status}")
+        # Add cooling zone status to title if cooling zones exist
+        if sim.cooling_zones:
+            num_zones = len(sim.cooling_zones.zones)
+            total_trapped = sum(len(zone.trapped_agents) for zone in sim.cooling_zones.zones)
+            title.set_text(f"Frame {frame} | Temp = {temp:.1f} | Zones: {num_zones} | Trapped: {total_trapped}")
         else:
             title.set_text(f"Frame {frame} | Temp = {temp:.1f}")
             
         counter[0] += 1
         
         # Return all animated elements
-        return_elements = [scat, title]
-        if goal_marker:
-            return_elements.append(goal_marker)
-        if trap_circle:
-            return_elements.append(trap_circle)
+        return_elements = [scat, title] + cooling_zone_circles
         
         return return_elements
     

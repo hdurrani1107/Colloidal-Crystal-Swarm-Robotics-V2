@@ -3,7 +3,7 @@
 #
 # temperature schedules
 #
-# Author: Humzah Durrani
+# Author: Humzah Durrani 
 #######################################################################
 
 ##########################
@@ -38,11 +38,14 @@ def temp_schedule_2():
 ##########################
 #Cooling Schedule 1
 ##########################
-def temp_schedule_3():
+def temp_schedule_3(max_temp, n_frames):
+    quarter_frames = int(n_frames / 4)
+    #print(quarter_frames)
     temperature_schedule = np.concatenate([
-        np.full(5000, 50),
-        np.linspace(50, 1, 10000),
-        np.full(10000, 1)
+        np.linspace(max_temp, 100, quarter_frames),
+        np.linspace(100, 50, quarter_frames),
+        np.linspace(50,0, quarter_frames),
+        np.full(quarter_frames,0)
     ])
     return temperature_schedule
 
@@ -55,13 +58,5 @@ def temp_schedule_4():
         np.full(5000, 10),
         np.full(5000, 5),
         np.full(5000, 0),
-    ])
-    return temperature_schedule
-
-def temp_schedule_5(max_temp, n_frames):
-    half_frames = int(n_frames / 2)
-    temperature_schedule = np.concatenate([
-        np.full(half_frames, max_temp),
-        np.linspace(max_temp, 30, half_frames)
     ])
     return temperature_schedule

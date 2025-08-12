@@ -1,0 +1,32 @@
+# Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Temporary output files (frames are typically regenerated)
+output/temp_frames/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Jupyter notebook checkpoints
+.ipynb_checkpoints/
+
+# Virtual environments
+venv/
+env/
+ENV/
+.env
+
+# Generated videos and analysis (uncomment if you want to ignore these)
+# output/videos/
+# output/graphs/
+# output/analysis/

@@ -8,9 +8,9 @@
 
 import numpy as np
 
-def sigma_1(z):
+def sigma_1(z): 
     """Sigmoid function used in gamma force calculation"""
-    return z / np.sqrt(1 + z ** 2)
+    return z / np.sqrt(1 + z ** 2) 
 
 class InvisibleGoal:
     def __init__(self, gamma_pos, detection_radius, trap_strength, trap_radius=None, max_capacity=10):
@@ -19,7 +19,6 @@ class InvisibleGoal:
         self.trap_radius = trap_radius if trap_radius is not None else detection_radius * 0.6
         self.trap_strength = trap_strength
         self.max_capacity = max_capacity
-        
         # State tracking
         self.trapped_agents = set()
         self.discovering_agents = set()

@@ -3,14 +3,14 @@
 #
 # Engine behind swarm behavior  
 #
-# Author: Humzah Durrani
+# Author: Humzah Durrani 
 #######################################################################
 
 ##########################
 # Importing Libraries
 ##########################
 import numpy as np
-from cooling_zone import CoolingZoneSystem
+from infrastructure import InfrastructureManager
 
 ##########################
 # Multi-Agent Setup
@@ -28,7 +28,7 @@ def init_melt(agents, init_temp, mass=1, kB=1):
     std_dev = np.sqrt(kB * init_temp / mass)
     agents[:, 2:] = np.random.normal(0, std_dev, size=(N, 2))
 
-def init_grid(n, bounds, spacing, center=(100, 100)):
+def init_grid(n, bounds, spacing, center=(50, 50)):
     agents = []
     cols = int(np.sqrt(n))
     rows = int(np.ceil(n / cols))
@@ -90,27 +90,14 @@ class multi_agent:
         self.dt = sampletime
         self.bounds = bounds
         self.obstacles = obstacles
-        self.cooling_zones = None  # Will be set up later if needed
+        self.infrastructure = InfrastructureManager()
         spacing = (2**(1/6)) * sigma
         self.agents = init_grid(number, bounds, spacing)
         #self.agents = init_grid_random_no_overlap(number, bounds, spacing)
-        
-        # Individual agent temperatures (initially set to system temperature)
-        self.agent_temperatures = np.full(number, 150.0)  # Will be updated with actual initial temp
     
-    def initialize_agent_temperatures(self, initial_temp):
-        """Initialize all agent temperatures to the starting system temperature"""
-        self.agent_temperatures.fill(initial_temp)
     
-    def setup_cooling_zones(self, zone_config):
-        """Set up the cooling zone system"""
-        self.cooling_zones = CoolingZoneSystem(
-            bounds=self.bounds,
-            zone_radius=zone_config['zone_radius'],
-            spawn_interval=zone_config['spawn_interval'],
-            base_lifetime=zone_config['base_lifetime'],
-            zone_temperature=zone_config['zone_temperature']
-        )
+    def setup_infrastructure(self, infrastructure_list, infrastructure_config):
+        self.infrastructure.add_nodes_from_config(infrastructure_list, infrastructure_config)
     
     def compute_neighbor_count(self, i, radius):
         pos_i = self.agents[i, :2]
@@ -122,33 +109,8 @@ class multi_agent:
             if np.linalg.norm(pos_i - pos_j) < radius:
                 count += 1
         return count
-    
-    def update_agent_temperatures(self, system_temp):
-        """Update individual agent temperatures based on cooling zones"""
-        cooling_rate = 0.05  # How fast agents cool/warm (0.05 = 5% per timestep)
-        
-        for i in range(len(self.agents)):
-            if self.cooling_zones and self.cooling_zones.is_agent_trapped(i):
-                # Agent is in cooling zone - gradually cool toward zone temperature
-                zone_pos, zone_radius = self.cooling_zones.get_zone_info_for_agent(i)
-                if zone_pos is not None:
-                    # Get zone temperature from the zone that trapped this agent
-                    for zone in self.cooling_zones.zones:
-                        if i in zone.trapped_agents:
-                            target_temp = zone.zone_temperature
-                            break
-                    else:
-                        target_temp = system_temp * 0.1  # fallback
-                    
-                    # Exponential approach to target temperature
-                    temp_diff = target_temp - self.agent_temperatures[i]
-                    self.agent_temperatures[i] += cooling_rate * temp_diff
-            else:
-                # Agent is free - gradually warm toward system temperature
-                temp_diff = system_temp - self.agent_temperatures[i]
-                self.agent_temperatures[i] += cooling_rate * temp_diff
 
-    def compute_forces(self, sigma, epsilon, distance, temp, c1_gamma, c2_gamma, alpha=0.5):
+    def compute_forces(self, sigma, epsilon, distance, temp, c1_gamma, c2_gamma, gamma_pos, alpha=0.5):
         n = len(self.agents)
         forces = np.zeros((n, 2))
         #epsilon_T = epsilon_temp(temp, epsilon, alpha)
@@ -189,7 +151,7 @@ class multi_agent:
                 # LJ Force Potential
                 ##############################
 
-                if dist > 1e-5 and dist < (3*sigma):
+                if dist > 1e-5:
                     inv_r = 1.0 / dist
                     inv_r6 = (sigma * inv_r) ** 6
                     inv_r12 = inv_r6 ** 2
@@ -214,24 +176,18 @@ class multi_agent:
                         total_force += (repulsion_strength * overlap / dist_to_obs) * (obs_vec)
 
             ##############################
-            # Cooling Zone System
+            # Infrastructure Node Forces
             ##############################
-            if self.cooling_zones:
-                # Process agent interaction with cooling zones
-                self.cooling_zones.process_agent(i, pos_i, vel_i)
+            if self.infrastructure.nodes:
+                # Compute forces from all infrastructure nodes
+                infrastructure_force = self.infrastructure.compute_infrastructure_forces(i, pos_i, vel_i, c1_gamma, c2_gamma)
+                total_force += infrastructure_force
 
             forces[i] = total_force
 
         return forces
 
     def update(self, forces, temp):
-        # Update cooling zones first
-        if self.cooling_zones:
-            self.cooling_zones.update()
-            
-        # Update individual agent temperatures
-        self.update_agent_temperatures(temp)
-        
         n = len(self.agents)
         for i in range(n):
             #pos_i = self.agents[i, :2]
@@ -250,11 +206,8 @@ class multi_agent:
             kB = 1
             noise = np.random.normal(0, 1, size=2)
 
-            # Use individual agent temperature
-            agent_temp = self.agent_temperatures[i]
-            
             c1 = np.exp(-friction * self.dt)
-            c2 = np.sqrt((1 - c1**2) * kB * agent_temp / mass)            
+            c2 = np.sqrt((1 - c1**2) * kB * temp / mass)            
             v_new = v * c1 + ((forces[i] / mass) * self.dt) + (c2 * noise)
 
             #a = (2 - friction * self.dt) / (2 + friction * self.dt)
@@ -263,20 +216,7 @@ class multi_agent:
             #v_new = (a * v) + (b * np.sqrt(1)) + ((self.dt/2)(forces[i]))
 
             self.agents[i, 2:] = v_new
-            new_pos = self.agents[i, :2] + v_new * self.dt
-            
-            # Apply cooling zone boundary constraints
-            if self.cooling_zones and self.cooling_zones.is_agent_trapped(i):
-                zone_pos, zone_radius = self.cooling_zones.get_zone_info_for_agent(i)
-                if zone_pos is not None:
-                    # Check if new position would leave the zone
-                    dist_to_center = np.linalg.norm(new_pos - zone_pos)
-                    if dist_to_center > zone_radius:
-                        # Keep agent inside the boundary
-                        direction = (new_pos - zone_pos) / dist_to_center
-                        new_pos = zone_pos + direction * zone_radius
-            
-            self.agents[i, :2] = new_pos
+            self.agents[i, :2] += v_new * self.dt
 
             #for ETH ZURICH Verlet
             #self.agents[i, :2] = self.agents[i, :2] + (v_new * c)

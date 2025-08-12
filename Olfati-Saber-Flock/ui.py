@@ -1,7 +1,8 @@
 #######################################################################
 # ui.py
 #
-# Visualization
+# Visualization for Olfati-Saber flocking simulation
+# Adapted from LJ-Swarm ui.py
 #
 # Author: Humzah Durrani
 #######################################################################
@@ -18,64 +19,97 @@ import matplotlib.cm as cm
 from matplotlib.colors import Normalize
 
 ############################ 
-# Phase Change Color Update
+# Flocking State Color Update
 ############################
 state_colors = np.array([
-    [0, 0.2, 1.0],   # solid: blue
-    [0.0, 0.8, 0.2], # liquid: green
-    [1.0, 0.1, 0.1]  # gas: red
+    [0, 0.8, 0.2],   # flocking: green
+    [0.0, 0.2, 1.0], # congregated: blue  
+    [1.0, 0.6, 0.1]  # dispersed: orange
 ])
 
 ############################
-# Classify States based on Kinetic Energy
+# Classify States based on Velocity and Neighbor Count
 ############################
 
-def classify_state(KE):
-    if KE < 10: 
-        return 0  # solid
-    elif KE < 50:
-        return 1  # liquid
-    else:
-        return 2  # gas
+def classify_flocking_state(velocities, neighbor_counts):
+    """
+    Classify agent states based on velocity magnitude and neighbor count
+    - High velocity, few neighbors: dispersed (orange)
+    - Medium velocity, some neighbors: flocking (green) 
+    - Low velocity, many neighbors: congregated (blue)
+    """
+    states = np.zeros(len(velocities), dtype=int)
+    
+    for i, (vel, neighbors) in enumerate(zip(velocities, neighbor_counts)):
+        speed = np.linalg.norm(vel)
+        
+        if speed < 2.0 and neighbors >= 3:
+            states[i] = 1  # congregated (blue)
+        elif speed >= 2.0 and neighbors <= 2:
+            states[i] = 2  # dispersed (orange)
+        else:
+            states[i] = 0  # flocking (green)
+    
+    return states
 
 ############################
 # Init Scatter Plot
 ############################
 
 def setup_visualization(bounds, obstacles):
-    fig, ax = plt.subplots(figsize=(5, 5))
+    fig, ax = plt.subplots(figsize=(8, 8))
     ax.set_xlim(bounds)
     ax.set_ylim(bounds)
-    #Equal Aspect Ratio 
+    # Equal Aspect Ratio 
     ax.set_aspect('equal', adjustable='box')
-    scat = ax.scatter([], [], s=10, animated=True, edgecolors='none')
+    scat = ax.scatter([], [], s=15, animated=True, edgecolors='none')
+    
+    # Initialize quiver with dummy data that will be updated
+    quiver = ax.quiver([0], [0], [0], [0], scale=50, alpha=0.7, animated=True)
+    
     title = ax.text(0.02, 1.02, '', transform=ax.transAxes)
 
-    #Obstacles Input
+    # Obstacles Input
     if obstacles:
         for pos, radius in obstacles:
             circle = plt.Circle(pos, radius, color='gray', alpha=0.4)
             ax.add_patch(circle)
 
-    # Cooling zone visualization elements
-    cooling_zone_circles = []
+    # Goal beacon visualization elements
+    beacon_circles = []
 
-    return fig, ax, scat, title, cooling_zone_circles
+    return fig, ax, scat, quiver, title, beacon_circles
 
 ############################
 # Updates entire frame
 ############################
 
 def create_update_function(sim, temperature_schedule, sample_time, sigma, epsilon, distance, c1_gamma, c2_gamma, alpha,
-                           scat, title, kinetic_temperatures, time_log, cooling_zone_circles, ax, metrics=None, 
+                           scat, quiver, title, kinetic_temperatures, time_log, beacon_circles, ax, metrics=None, 
                            render_interval=10):
     counter = [0]
+    current_quiver = [quiver]  # Store quiver in a list so we can modify it
 
     def compute_kinetic_temperature(agents, mass=1, kB=1):
         velocities = agents[:, 2:]
         KE_total = 0.5 * mass * np.sum(velocities**2)
         N = len(agents)
         return KE_total / (N * kB)
+    
+    def compute_neighbor_counts(agents, R=12):
+        """Compute number of neighbors for each agent"""
+        positions = agents[:, :2]
+        n = len(agents)
+        neighbor_counts = np.zeros(n, dtype=int)
+        
+        for i in range(n):
+            for j in range(n):
+                if i != j:
+                    dist = np.linalg.norm(positions[i] - positions[j])
+                    if dist <= R:
+                        neighbor_counts[i] += 1
+        
+        return neighbor_counts
 
     def update(frame):
         # Calculate the starting frame for this render step
@@ -89,8 +123,8 @@ def create_update_function(sim, temperature_schedule, sample_time, sigma, epsilo
             last_temp = temp
             positions = sim.agents[:, :2]
             velocities = sim.agents[:, 2:]
-            KE = 0.5 * np.sum(velocities**2, axis = 1)
-            states = np.array([classify_state(k) for k in KE])
+            neighbor_counts = compute_neighbor_counts(sim.agents)
+            states = classify_flocking_state(velocities, neighbor_counts)
             colors = state_colors[states]
             
             # Log initial state
@@ -98,10 +132,10 @@ def create_update_function(sim, temperature_schedule, sample_time, sigma, epsilo
             kinetic_temperatures.append(T_kin)
             time_log.append(0)
             
-            if sim.cooling_zones and metrics:
-                active_zones = sim.cooling_zones.get_active_zones()
-                num_zones = len(active_zones)
-                trapped_counts = [n for _, _, n in active_zones]
+            if sim.goal_beacons and metrics:
+                active_beacons = sim.goal_beacons.get_active_beacons()
+                num_beacons = len(active_beacons)
+                trapped_counts = [n for _, _, n in active_beacons]
                 total_trapped = int(np.sum(trapped_counts)) if trapped_counts else 0
                 mean_trapped = float(np.mean(trapped_counts)) if trapped_counts else 0.0
 
@@ -109,7 +143,7 @@ def create_update_function(sim, temperature_schedule, sample_time, sigma, epsilo
                     frame=0,
                     t=0.0,
                     system_temp=float(temp),
-                    num_zones=num_zones,
+                    num_beacons=num_beacons,
                     total_trapped=total_trapped,
                     mean_trapped=mean_trapped,
                     arrivals_this_frame=0
@@ -122,8 +156,10 @@ def create_update_function(sim, temperature_schedule, sample_time, sigma, epsilo
                     break
                 temp = temperature_schedule[actual_frame]
                 last_temp = temp
-                forces = sim.compute_forces(sigma, epsilon, distance, temp, c1_gamma, c2_gamma, alpha)
-                sim.update(forces, temp)
+                
+                # No external forces needed for flocking - all handled internally
+                external_forces = np.zeros((len(sim.agents), 2))
+                sim.update(external_forces, temp)
                 
                 # Log data every simulation step
                 T_kin = compute_kinetic_temperature(sim.agents)
@@ -133,22 +169,22 @@ def create_update_function(sim, temperature_schedule, sample_time, sigma, epsilo
                 time_log.append(actual_frame * sample_time)
                 
                 # Log metrics for every simulation frame
-                if sim.cooling_zones and metrics:
-                    active_zones = sim.cooling_zones.get_active_zones()
-                    num_zones = len(active_zones)
-                    trapped_counts = [n for _, _, n in active_zones]
+                if sim.goal_beacons and metrics:
+                    active_beacons = sim.goal_beacons.get_active_beacons()
+                    num_beacons = len(active_beacons)
+                    trapped_counts = [n for _, _, n in active_beacons]
                     total_trapped = int(np.sum(trapped_counts)) if trapped_counts else 0
                     mean_trapped = float(np.mean(trapped_counts)) if trapped_counts else 0.0
 
-                    prev_total = getattr(sim.cooling_zones, f"_prev_total_trapped_{actual_frame-1}", 0)
+                    prev_total = getattr(sim.goal_beacons, f"_prev_total_trapped_{actual_frame-1}", 0)
                     arrivals_this_frame = max(0, total_trapped - prev_total)
-                    setattr(sim.cooling_zones, f"_prev_total_trapped_{actual_frame}", total_trapped)
+                    setattr(sim.goal_beacons, f"_prev_total_trapped_{actual_frame}", total_trapped)
 
                     metrics.log_frame(
                         frame=int(actual_frame),
                         t=float(actual_frame * sample_time),
                         system_temp=float(temp),
-                        num_zones=num_zones,
+                        num_beacons=num_beacons,
                         total_trapped=total_trapped,
                         mean_trapped=mean_trapped,
                         arrivals_this_frame=arrivals_this_frame
@@ -162,8 +198,10 @@ def create_update_function(sim, temperature_schedule, sample_time, sigma, epsilo
                     break
                 temp = temperature_schedule[actual_frame]
                 last_temp = temp
-                forces = sim.compute_forces(sigma, epsilon, distance, temp, c1_gamma, c2_gamma, alpha)
-                sim.update(forces, temp)
+                
+                # No external forces needed for flocking
+                external_forces = np.zeros((len(sim.agents), 2))
+                sim.update(external_forces, temp)
                 
                 # Log data every simulation step
                 T_kin = compute_kinetic_temperature(sim.agents)
@@ -173,22 +211,22 @@ def create_update_function(sim, temperature_schedule, sample_time, sigma, epsilo
                 time_log.append(actual_frame * sample_time)
                 
                 # Log metrics for every simulation frame
-                if sim.cooling_zones and metrics:
-                    active_zones = sim.cooling_zones.get_active_zones()
-                    num_zones = len(active_zones)
-                    trapped_counts = [n for _, _, n in active_zones]
+                if sim.goal_beacons and metrics:
+                    active_beacons = sim.goal_beacons.get_active_beacons()
+                    num_beacons = len(active_beacons)
+                    trapped_counts = [n for _, _, n in active_beacons]
                     total_trapped = int(np.sum(trapped_counts)) if trapped_counts else 0
                     mean_trapped = float(np.mean(trapped_counts)) if trapped_counts else 0.0
 
-                    prev_total = getattr(sim.cooling_zones, f"_prev_total_trapped_{actual_frame-1}", 0)
+                    prev_total = getattr(sim.goal_beacons, f"_prev_total_trapped_{actual_frame-1}", 0)
                     arrivals_this_frame = max(0, total_trapped - prev_total)
-                    setattr(sim.cooling_zones, f"_prev_total_trapped_{actual_frame}", total_trapped)
+                    setattr(sim.goal_beacons, f"_prev_total_trapped_{actual_frame}", total_trapped)
 
                     metrics.log_frame(
                         frame=int(actual_frame),
                         t=float(actual_frame * sample_time),
                         system_temp=float(temp),
-                        num_zones=num_zones,
+                        num_beacons=num_beacons,
                         total_trapped=total_trapped,
                         mean_trapped=mean_trapped,
                         arrivals_this_frame=arrivals_this_frame
@@ -197,60 +235,76 @@ def create_update_function(sim, temperature_schedule, sample_time, sigma, epsilo
             # Compute visualization data after simulation steps
             positions = sim.agents[:, :2]
             velocities = sim.agents[:, 2:]
-            KE = 0.5 * np.sum(velocities**2, axis = 1)
-            states = np.array([classify_state(k) for k in KE])
+            neighbor_counts = compute_neighbor_counts(sim.agents)
+            states = classify_flocking_state(velocities, neighbor_counts)
             colors = state_colors[states]
 
-        # Note: metrics are already logged in the simulation loop above
-        # This section just handles visualization updates
-
-        # Update cooling zone visualization
-        if sim.cooling_zones:
-            # Remove old cooling zone circles
-            for circle in cooling_zone_circles:
+        # Update goal beacon visualization
+        if sim.goal_beacons:
+            # Remove old beacon circles
+            for circle in beacon_circles:
                 circle.remove()
-            cooling_zone_circles.clear()
+            beacon_circles.clear()
             
-            # Add current cooling zones
-            active_zones = sim.cooling_zones.get_active_zones()
+            # Add current goal beacons
+            active_beacons = sim.goal_beacons.get_active_beacons()
             if frame < 10:  # Debug print for first few frames
-                print(f"Frame {frame}: {len(active_zones)} active zones")
-            for zone_pos, zone_radius, num_agents in active_zones:
+                print(f"Frame {frame}: {len(active_beacons)} active beacons")
+            for beacon_pos, beacon_radius, num_agents in active_beacons:
                 # Color based on number of trapped agents
                 if num_agents == 0:
                     color = 'cyan'
-                    zone_alpha = 0.3
+                    beacon_alpha = 0.3
                 elif num_agents <= 3:
                     color = 'blue'
-                    zone_alpha = 0.5
+                    beacon_alpha = 0.5
                 else:
                     color = 'darkblue'
-                    zone_alpha = 0.7
+                    beacon_alpha = 0.7
                 
-                circle = plt.Circle(zone_pos, zone_radius, fill=False, color=color, 
-                                  linestyle='-', alpha=zone_alpha, linewidth=3)
+                # Draw beacon as circle with goal point at center
+                circle = plt.Circle(beacon_pos, beacon_radius, fill=False, color=color, 
+                                  linestyle='-', alpha=beacon_alpha, linewidth=3)
                 ax.add_patch(circle)
-                cooling_zone_circles.append(circle)
+                beacon_circles.append(circle)
+                
+                # Add goal point marker at center
+                goal_point = plt.Circle(beacon_pos, 2, fill=True, color=color, alpha=0.8)
+                ax.add_patch(goal_point)
+                beacon_circles.append(goal_point)
 
+        # Update scatter plot
         scat.set_offsets(positions)
         scat.set_facecolor(colors)
         
-        # Add cooling zone status to title if cooling zones exist
+        # Update velocity arrows (quiver plot) - remove old and create new
+        if current_quiver[0] is not None:
+            current_quiver[0].remove()
+        
+        if len(positions) > 0:
+            # Scale velocities for better visualization
+            vel_scale = 2.0
+            scaled_vels = velocities * vel_scale
+            current_quiver[0] = ax.quiver(positions[:, 0], positions[:, 1], 
+                              scaled_vels[:, 0], scaled_vels[:, 1], 
+                              scale=50, alpha=0.6, width=0.002, color='red')
+        else:
+            current_quiver[0] = ax.quiver([0], [0], [0], [0], scale=50, alpha=0.6)
+        
         # Show the rendered frame number (0, 10, 20, 30, ...)
         display_frame = frame * render_interval
-        if sim.cooling_zones:
-            num_zones = len(sim.cooling_zones.zones)
-            total_trapped = sum(len(zone.trapped_agents) for zone in sim.cooling_zones.zones)
-            title.set_text(f"Time {display_frame * 0.005} | Temp = {last_temp:.1f} | Zones: {num_zones} | Trapped: {total_trapped}")
+        if sim.goal_beacons:
+            num_beacons = len(sim.goal_beacons.beacons)
+            total_trapped = sum(len(beacon.trapped_agents) for beacon in sim.goal_beacons.beacons)
+            title.set_text(f"Time {display_frame * 0.005} | Temp = {last_temp:.1f} | Beacons: {num_beacons} | Trapped: {total_trapped}")
         else:
             title.set_text(f"Time {display_frame * 0.005} | Temp = {last_temp:.1f}")
             
         counter[0] += 1
         
-        # Return all animated elements
-        return_elements = [scat, title] + cooling_zone_circles
+        # Return all animated elements (note: quiver is recreated each frame)
+        return_elements = [scat, title] + beacon_circles
         
         return return_elements
     
     return update
-

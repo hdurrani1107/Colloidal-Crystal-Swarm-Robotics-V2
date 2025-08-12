@@ -104,12 +104,14 @@ class multi_agent:
     
     def setup_cooling_zones(self, zone_config):
         """Set up the cooling zone system"""
+        from cooling_zone import CoolingZoneSystem
         self.cooling_zones = CoolingZoneSystem(
             bounds=self.bounds,
             zone_radius=zone_config['zone_radius'],
             spawn_interval=zone_config['spawn_interval'],
             base_lifetime=zone_config['base_lifetime'],
-            zone_temperature=zone_config['zone_temperature']
+            zone_temperature=zone_config['zone_temperature'],
+            logger=zone_config.get('logger', None)
         )
     
     def compute_neighbor_count(self, i, radius):
@@ -227,6 +229,7 @@ class multi_agent:
     def update(self, forces, temp):
         # Update cooling zones first
         if self.cooling_zones:
+            self.cooling_zones.frame += 1
             self.cooling_zones.update()
             
         # Update individual agent temperatures

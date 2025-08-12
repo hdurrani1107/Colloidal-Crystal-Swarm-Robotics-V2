@@ -1,7 +1,8 @@
 #######################################################################
 # main.py
 #
-# Run simulation from here
+# Olfati-Saber flocking simulation with goal beacons
+# Adapted from LJ-Swarm main.py
 #
 # Author: Humzah Durrani
 #######################################################################
@@ -10,7 +11,7 @@
 # Importing Libraries
 ##########################
  
-import numpy as np 
+import numpy as np
 import matplotlib
 matplotlib.rcParams['animation.ffmpeg_path'] = r'C:\Users\hummy\anaconda3\envs\my-env\Library\bin\ffmpeg.exe'
 import matplotlib.pyplot as plt
@@ -18,7 +19,7 @@ from matplotlib.animation import FuncAnimation
 import matplotlib.cm as cm
 from matplotlib.colors import Normalize
 from tqdm import tqdm
-from engine import multi_agent, init_melt
+from engine import multi_agent
 import schedule
 from ui import setup_visualization, create_update_function
 from metrics import MetricsLogger
@@ -27,23 +28,19 @@ from metrics import MetricsLogger
 # Simulation Params
 ##########################
 
-agents = 150  
-sigma = 3.0
-epsilon = 3.0 
-sample_time = 0.005
+agents = 150
+sample_time = 0.005  # Smaller timestep for flocking stability
 bounds = [0, 200]
-distance = (2 ** (1 / 6)) * sigma
-alpha = 0.5
-c1_gamma = 10 
-c2_gamma = 10
-# Cooling Zone Configuration
-cooling_zone_config = {
-    'zone_radius': 10.0,        # radius of cooling zones
-    'spawn_interval': 400,      # frames between zone spawns when no zones exist
-    'base_lifetime': 1000,       # base lifetime of zones in frames
-    'zone_temperature': 0.0,    # temperature of cooling zones
-    'logger': None              # will be set below
+
+# Goal Beacon Configuration (equivalent to cooling zones)
+goal_beacon_config = {
+    'beacon_radius': 10.0,        # radius of goal beacons
+    'spawn_interval': 400,        # frames between beacon spawns when no beacons exist
+    'base_lifetime': 1000,        # base lifetime of beacons in frames
+    'velocity_damping': 0.95,     # velocity damping factor inside beacon
+    'logger': None                # will be set below
 }
+
 n_frames = 30000
 render_interval = 10  # Render every 10th frame for performance
 render_frames = n_frames // render_interval  # Number of frames to actually render
@@ -63,26 +60,21 @@ import os
 output_dir = "../output"
 os.makedirs(f"{output_dir}/videos", exist_ok=True)
 os.makedirs(f"{output_dir}/graphs", exist_ok=True)
-os.makedirs(f"{output_dir}/metrics/LJ_metric", exist_ok=True)
-metrics = MetricsLogger(out_dir=f"{output_dir}/metrics/LJ_metric")
+os.makedirs(f"{output_dir}/metrics/OS_metric", exist_ok=True)
+metrics = MetricsLogger(out_dir=f"{output_dir}/metrics/OS_metric")
 
 ##########################
 # Init Sim
 ##########################
 
-sim = multi_agent(agents, sigma, sample_time, bounds, obstacles)
-cooling_zone_config['logger'] = metrics
-sim.setup_cooling_zones(cooling_zone_config)
-
-#Melted Initial Condition
-initial_temperature = 150
-init_melt(sim.agents, init_temp=initial_temperature)
-sim.initialize_agent_temperatures(initial_temperature)
+sim = multi_agent(agents, sample_time, bounds, obstacles)
+goal_beacon_config['logger'] = metrics
+sim.setup_goal_beacons(goal_beacon_config)
 
 ##########################
 # Visualization
 ###########################
-fig, ax, scat, title, cooling_zone_circles = setup_visualization(bounds, obstacles)
+fig, ax, scat, quiver, title, beacon_circles = setup_visualization(bounds, obstacles)
 norm = Normalize(vmin=0, vmax=50)
 scat.set_norm(norm)
 
@@ -96,9 +88,10 @@ time_log = []
 # Update Sim
 ##########################
 update = create_update_function(
-    sim, temperature_schedule, sample_time, sigma, epsilon,
-    distance, c1_gamma, c2_gamma, alpha, scat, 
-    title, kinetic_temperature, time_log, cooling_zone_circles, ax,
+    sim, temperature_schedule, sample_time, sigma=3.0, epsilon=3.0,
+    distance=10.0, c1_gamma=5.0, c2_gamma=2.0, alpha=0.5, scat=scat, 
+    quiver=quiver, title=title, kinetic_temperatures=kinetic_temperature, 
+    time_log=time_log, beacon_circles=beacon_circles, ax=ax,
     metrics=metrics, render_interval=render_interval
 )
 
@@ -107,7 +100,7 @@ update = create_update_function(
 ############################
 
 def frame_generator():
-    for i in tqdm(range(render_frames), desc="Simulating"):
+    for i in tqdm(range(render_frames), desc="Simulating Olfati-Saber Flocking"):
         yield i
 
 ##########################
@@ -118,21 +111,22 @@ anim = FuncAnimation(
 )
 
 ##########################
-# Save Logs
+# Save Logs 
 ##########################
 
-anim.save(f"{output_dir}/videos/lj_crystallization_simulation.mp4", fps=60, dpi=150)
+anim.save(f"{output_dir}/videos/olfati_saber_flocking_simulation.mp4", fps=60, dpi=150)
 
 plt.figure(figsize=(6, 3))
-plt.plot(time_log, kinetic_temperature, label="Kinetic Energy")
+plt.plot(time_log, kinetic_temperature, label="Kinetic Energy", color='green')
 plt.xlabel("Time")
 plt.ylabel("Average Kinetic Energy") 
-plt.title("Average Kinetic Energy Over Time")
+plt.title("Average Kinetic Energy Over Time - Olfati-Saber Flocking")
 plt.grid(True)
 plt.legend()
 plt.tight_layout()
-plt.savefig(f"{output_dir}/graphs/kinetic_temperature_analysis.png")
+plt.savefig(f"{output_dir}/graphs/olfati_saber_kinetic_temperature_analysis.png")
 plt.show()
 
 metrics.save()
-print(f"Saved metrics to {output_dir}/metrics/LJ_metric")
+print(f"Saved metrics to {output_dir}/metrics/OS_metric")
+print("Olfati-Saber flocking simulation completed!")

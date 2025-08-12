@@ -7,17 +7,25 @@
 #######################################################################
 
 import numpy as np
+from typing import Optional
+from metrics import MetricsLogger
 
 class CoolingZone:
-    def __init__(self, position, radius, base_lifetime, zone_temperature=10.0):
+    _next_id = 0
+    def __init__(self, position, radius, base_lifetime, zone_temperature=10.0,
+                 logger: Optional[MetricsLogger]=None):
+        self.id = CoolingZone._next_id; CoolingZone._next_id += 1
         self.position = position
         self.radius = radius
         self.base_lifetime = base_lifetime
         self.zone_temperature = zone_temperature
         self.trapped_agents = set()
-        self.frames_remaining = None  # Will be set when first agent enters
+        self.frames_remaining = None  # set when first agent enters
         self.is_active = True
-        self.lifetime_started = False  # Track whether countdown has begun
+        self.lifetime_started = False
+        self.logger = logger
+        self.birth_frame = None
+        self.first_arrival_frame = None
         
     def add_agent(self, agent_idx):
         """Add an agent to this cooling zone"""
@@ -33,12 +41,17 @@ class CoolingZone:
             self.update_lifetime()
     
     def update_lifetime(self):
-        """Update the lifetime based on number of trapped agents"""
+        """Update the lifetime based on number of trapped agents, accounting for elapsed time."""
         num_agents = len(self.trapped_agents)
         if num_agents > 0:
-            # More agents = faster disappearing
-            reduction_factor = 1.0 + (num_agents - 1) * 0.2  # Each additional agent reduces lifetime by 20%
-            self.frames_remaining = max(1, int(self.base_lifetime / reduction_factor))
+            reduction_factor = 1.0 + (num_agents - 1) * 0.2  # Each extra agent reduces lifetime by 20%
+            new_total = max(1, int(self.base_lifetime / reduction_factor))
+            if self.lifetime_started and self.frames_remaining is not None:
+                elapsed = self.base_lifetime - self.frames_remaining
+                remaining = max(1, new_total - elapsed)
+                self.frames_remaining = remaining
+            else:
+                self.frames_remaining = new_total
     
     def is_inside(self, position):
         """Check if a position is inside this cooling zone"""
@@ -62,7 +75,8 @@ class CoolingZone:
         return self.trapped_agents.copy()
 
 class CoolingZoneSystem:
-    def __init__(self, bounds, zone_radius=15.0, spawn_interval=500, base_lifetime=300, zone_temperature=10.0):
+    def __init__(self, bounds, zone_radius=15.0, spawn_interval=500, base_lifetime=300, zone_temperature=10.0,
+                 logger: Optional[MetricsLogger]=None):
         self.bounds = bounds
         self.zone_radius = zone_radius
         self.spawn_interval = spawn_interval
@@ -71,31 +85,45 @@ class CoolingZoneSystem:
         self.zones = []
         self.frames_since_last_spawn = 0
         self.agent_zone_map = {}  # Maps agent_idx to zone
-        
-        # Spawn initial cooling zone
+        self.logger = logger
+        self.frame = 0  # will be set by caller each tick
         self.spawn_zone()
         
     def spawn_zone(self):
         """Spawn a new cooling zone at a random location"""
-        # Choose random position within bounds, avoiding edges
         margin = self.zone_radius + 5
         x = np.random.uniform(self.bounds[0] + margin, self.bounds[1] - margin)
         y = np.random.uniform(self.bounds[0] + margin, self.bounds[1] - margin)
         position = np.array([x, y])
-        
-        new_zone = CoolingZone(position, self.zone_radius, self.base_lifetime, self.zone_temperature)
+
+        new_zone = CoolingZone(position, self.zone_radius, self.base_lifetime,
+                               self.zone_temperature, logger=self.logger)
+        new_zone.birth_frame = self.frame
         self.zones.append(new_zone)
+        if self.logger:
+            self.logger.log_event(
+                frame=self.frame, t=None, event="zone_spawn", zone_id=new_zone.id,
+                zone_pos_x=float(position[0]), zone_pos_y=float(position[1]),
+                zone_radius=self.zone_radius, trapped_count=0, extra=None
+            )
         print(f"New cooling zone spawned at {position} with radius {self.zone_radius}")
         print(f"Zone bounds: x=[{self.bounds[0] + margin}, {self.bounds[1] - margin}], y=[{self.bounds[0] + margin}, {self.bounds[1] - margin}]")
         
     def process_agent(self, agent_idx, agent_pos, agent_vel):
         """Process an agent's interaction with cooling zones"""
-        # Check if agent enters any active cooling zone
         if agent_idx not in self.agent_zone_map:
             for zone in self.zones:
                 if zone.is_active and zone.is_inside(agent_pos):
                     zone.add_agent(agent_idx)
                     self.agent_zone_map[agent_idx] = zone
+                    if zone.first_arrival_frame is None:
+                        zone.first_arrival_frame = self.frame
+                        if self.logger:
+                            self.logger.log_event(
+                                frame=self.frame, t=None, event="first_arrival", zone_id=zone.id,
+                                zone_pos_x=float(zone.position[0]), zone_pos_y=float(zone.position[1]),
+                                zone_radius=zone.radius, trapped_count=len(zone.trapped_agents), extra=None
+                            )
                     print(f"DEBUG: Agent {agent_idx} entered zone at {zone.position}")
                     break
     
@@ -116,31 +144,30 @@ class CoolingZoneSystem:
     
     def update(self):
         """Update all cooling zones and spawn new ones"""
-        # Update existing zones and remove inactive ones
         active_zones = []
         freed_agents = set()
-        
         for zone in self.zones:
-            if zone.update():  # Returns True if zone is still active
+            if zone.update():
                 active_zones.append(zone)
             else:
-                # Zone disappeared, free all its agents
                 freed_agents.update(zone.get_trapped_agents())
-        
-        # Remove freed agents from agent_zone_map
+                if self.logger:
+                    self.logger.log_event(
+                        frame=self.frame, t=None, event="zone_complete", zone_id=zone.id,
+                        zone_pos_x=float(zone.position[0]), zone_pos_y=float(zone.position[1]),
+                        zone_radius=zone.radius, trapped_count=len(zone.trapped_agents),
+                        extra={"lifetime_frames": (self.frame - (zone.birth_frame or self.frame))}
+                    )
         for agent_idx in freed_agents:
             if agent_idx in self.agent_zone_map:
                 del self.agent_zone_map[agent_idx]
-        
-        # Check if any zones disappeared to reset spawn timer
+
         zones_disappeared = len(self.zones) > len(active_zones)
         self.zones = active_zones
-        
-        # Reset spawn timer when zones disappear
+
         if zones_disappeared and len(self.zones) == 0:
             self.frames_since_last_spawn = 0
-        
-        # Spawn new zone if needed
+
         self.frames_since_last_spawn += 1
         if len(self.zones) == 0 and self.frames_since_last_spawn >= self.spawn_interval:
             self.spawn_zone()

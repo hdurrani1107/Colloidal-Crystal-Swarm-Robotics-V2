@@ -154,8 +154,65 @@ class multi_agent:
 
     def compute_forces(self, sigma, epsilon, distance, temp, c1_gamma, c2_gamma, alpha=0.5):
         n = len(self.agents)
+        positions = self.agents[:, :2]
+        
+        ##############################
+        # Vectorized LJ Force Calculation
+        ##############################
+        
+        # Compute all pairwise distance vectors at once
+        pos_diff = positions[:, np.newaxis, :] - positions[np.newaxis, :, :]  # Shape: (n, n, 2)
+        distances = np.linalg.norm(pos_diff, axis=2)  # Shape: (n, n)
+        
+        # Create mask: avoid self-interaction, apply distance cutoffs
+        mask = (distances > 1e-5) & (distances < 3*sigma) & ~np.eye(n, dtype=bool)
+        
+        # Vectorized LJ potential calculation with safe division
+        safe_distances = np.where(distances > 1e-5, distances, 1.0)  # Avoid division by zero
+        inv_r = 1.0 / safe_distances
+        inv_r6 = (sigma * inv_r) ** 6
+        inv_r12 = inv_r6 ** 2
+        lj_scalar = 24 * epsilon * (2 * inv_r12 - inv_r6) * inv_r
+        
+        # Apply mask and compute force directions with safe division
+        lj_scalar = np.where(mask, lj_scalar, 0)
+        directions = pos_diff / safe_distances[:, :, np.newaxis]  # Safe division
+        directions = np.where(mask[:, :, np.newaxis], directions, 0)  # Apply mask
+        
+        # Sum forces for each agent (broadcasting lj_scalar across direction vectors)
+        forces = np.sum(lj_scalar[:, :, np.newaxis] * directions, axis=1)
+
+        ##############################
+        # Obstacle Forces (still loop-based for now)
+        ##############################
+        if self.obstacles:
+            for i in range(n):
+                pos_i = positions[i]
+                for obs_pos, obs_radius in self.obstacles:
+                    obs_vec = pos_i - obs_pos
+                    dist_to_obs = np.linalg.norm(obs_vec)
+                    overlap = obs_radius + 1.5 * sigma - dist_to_obs  # soft repulsion zone
+
+                    if overlap > 0:
+                        repulsion_strength = 100  # tune this
+                        forces[i] += (repulsion_strength * overlap / dist_to_obs) * (obs_vec)
+
+        ##############################
+        # Cooling Zone System
+        ##############################
+        if self.cooling_zones:
+            for i in range(n):
+                pos_i = positions[i]
+                vel_i = self.agents[i, 2:]
+                # Process agent interaction with cooling zones
+                self.cooling_zones.process_agent(i, pos_i, vel_i)
+
+        return forces
+
+    def compute_forces_original(self, sigma, epsilon, distance, temp, c1_gamma, c2_gamma, alpha=0.5):
+        """Original nested loop implementation - kept for validation"""
+        n = len(self.agents)
         forces = np.zeros((n, 2))
-        #epsilon_T = epsilon_temp(temp, epsilon, alpha)
 
         for i in range(n):
             pos_i = self.agents[i, :2]
@@ -167,31 +224,7 @@ class multi_agent:
                     continue
                 pos_j = self.agents[j, :2]
                 offset = pos_i - pos_j
-                
-                #APPLYING MINIMUM IMAGE CONVENTION to ensure particle of the lowest distance is chosen
-                #Includes particles on the other side of the PBC
-                # Box size need multiple boxes
-                #I did this wrong too
-                #box_length = self.bounds[1] - self.bounds[0]
-
-                # Apply MIC in x and y
-                #for dim in range(2):
-                #    if offset[dim] > 0.5 * box_length:
-                #        offset[dim] -= box_length
-                #    elif offset[dim] < -0.5 * box_length:
-                #        offset[dim] += box_length
-
-
                 dist = np.linalg.norm(offset)
-                #This is an error: I don't know why I changed this but effectively
-                #Once it hits the optimal distance it stops the lj-potential.
-                #So all it wants to do is repel.
-                #Updated: Converted it all the vector notation
-                #if dist < distance and dist > 1e-3:
-                
-                ##############################
-                # LJ Force Potential
-                ##############################
 
                 if dist > 1e-5 and dist < (3*sigma):
                     inv_r = 1.0 / dist
@@ -199,29 +232,20 @@ class multi_agent:
                     inv_r12 = inv_r6 ** 2
                     lj_scalar = 24 * epsilon * (2 * inv_r12 - inv_r6) * inv_r
                     total_force += lj_scalar * (offset / dist)
-                    #total_force += lj_force
-            #if not is_liquid:
 
-
-            ############################## 
-            # LJ Force Potential
-            ##############################
-
+            # Obstacle forces
             if self.obstacles:
                 for obs_pos, obs_radius in self.obstacles:
                     obs_vec = pos_i - obs_pos
                     dist_to_obs = np.linalg.norm(obs_vec)
-                    overlap = obs_radius + 1.5 * sigma - dist_to_obs  # soft repulsion zone
+                    overlap = obs_radius + 1.5 * sigma - dist_to_obs
 
                     if overlap > 0:
-                        repulsion_strength = 100  # tune this
+                        repulsion_strength = 100
                         total_force += (repulsion_strength * overlap / dist_to_obs) * (obs_vec)
 
-            ##############################
-            # Cooling Zone System
-            ##############################
+            # Cooling zone processing
             if self.cooling_zones:
-                # Process agent interaction with cooling zones
                 self.cooling_zones.process_agent(i, pos_i, vel_i)
 
             forces[i] = total_force

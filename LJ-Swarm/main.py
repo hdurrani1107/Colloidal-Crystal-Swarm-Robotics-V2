@@ -39,7 +39,7 @@ c2_gamma = 10
 # Cooling Zone Configuration
 cooling_zone_config = {
     'zone_radius': 10.0,        # mean radius of cooling zones
-    'radius_std': 2.0,          # standard deviation for radius sampling
+    'radius_std': 1.0,          # standard deviation for radius sampling
     'max_concurrent_zones': 3,  # maximum number of active zones at once
     'spawn_interval': 400,      # frames between zone spawns when no zones exist
     'base_lifetime': 1000,       # base lifetime of zones in frames

@@ -89,7 +89,13 @@ class CoolingZoneSystem:
         self.agent_zone_map = {}  # Maps agent_idx to zone
         self.logger = logger
         self.frame = 0  # will be set by caller each tick
-        self.spawn_zone()
+        
+        # Spawn all max_concurrent_zones at initialization
+        for i in range(self.max_concurrent_zones):
+            success = self.spawn_zone()
+            if not success:
+                print(f"Warning: Could only spawn {i} out of {self.max_concurrent_zones} initial zones")
+                break
         
     def spawn_zone(self):
         """Spawn a new cooling zone at a random location with random radius"""
@@ -100,7 +106,7 @@ class CoolingZoneSystem:
         position = self._find_non_overlapping_position(radius)
         if position is None:
             print("Could not find non-overlapping position for new cooling zone")
-            return
+            return False
 
         new_zone = CoolingZone(position, radius, self.base_lifetime,
                                self.zone_temperature, logger=self.logger)
@@ -113,6 +119,7 @@ class CoolingZoneSystem:
                 zone_radius=radius, trapped_count=0, extra=None
             )
         print(f"New cooling zone spawned at {position} with radius {radius:.2f}")
+        return True
     
     def _find_non_overlapping_position(self, radius, max_attempts=100):
         """Find a position that doesn't overlap with existing zones"""
@@ -128,7 +135,8 @@ class CoolingZoneSystem:
             for existing_zone in self.zones:
                 if existing_zone.is_active:
                     distance = np.linalg.norm(position - existing_zone.position)
-                    min_distance = radius + existing_zone.radius + 5  # 5 unit buffer
+                    # Ensure minimum separation of at least 25 units between zone centers
+                    min_distance = max(radius + existing_zone.radius + 10, 25)
                     if distance < min_distance:
                         overlaps = True
                         break
@@ -201,8 +209,10 @@ class CoolingZoneSystem:
         
         # Spawn new zones if we have fewer than max_concurrent_zones and enough time has passed
         if len(self.zones) < self.max_concurrent_zones and self.frames_since_last_spawn >= self.spawn_interval:
-            self.spawn_zone()
-            self.frames_since_last_spawn = 0
+            success = self.spawn_zone()
+            if success:
+                self.frames_since_last_spawn = 0
+            # If spawn failed, don't reset timer - will try again next frame
     
     def get_active_zones(self):
         """Get list of active cooling zones for visualization"""

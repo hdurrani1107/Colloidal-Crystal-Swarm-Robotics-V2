@@ -111,6 +111,8 @@ class multi_agent:
             spawn_interval=zone_config['spawn_interval'],
             base_lifetime=zone_config['base_lifetime'],
             zone_temperature=zone_config['zone_temperature'],
+            max_concurrent_zones=zone_config.get('max_concurrent_zones', 3),
+            radius_std=zone_config.get('radius_std', 2.0),
             logger=zone_config.get('logger', None)
         )
     

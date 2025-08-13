@@ -76,12 +76,14 @@ class CoolingZone:
 
 class CoolingZoneSystem:
     def __init__(self, bounds, zone_radius=15.0, spawn_interval=500, base_lifetime=300, zone_temperature=10.0,
-                 logger: Optional[MetricsLogger]=None):
+                 max_concurrent_zones=3, radius_std=2.0, logger: Optional[MetricsLogger]=None):
         self.bounds = bounds
-        self.zone_radius = zone_radius
+        self.zone_radius = zone_radius  # Mean radius for normal distribution
+        self.radius_std = radius_std    # Standard deviation for radius sampling
         self.spawn_interval = spawn_interval
         self.base_lifetime = base_lifetime
         self.zone_temperature = zone_temperature
+        self.max_concurrent_zones = max_concurrent_zones
         self.zones = []
         self.frames_since_last_spawn = 0
         self.agent_zone_map = {}  # Maps agent_idx to zone
@@ -90,13 +92,17 @@ class CoolingZoneSystem:
         self.spawn_zone()
         
     def spawn_zone(self):
-        """Spawn a new cooling zone at a random location"""
-        margin = self.zone_radius + 5
-        x = np.random.uniform(self.bounds[0] + margin, self.bounds[1] - margin)
-        y = np.random.uniform(self.bounds[0] + margin, self.bounds[1] - margin)
-        position = np.array([x, y])
+        """Spawn a new cooling zone at a random location with random radius"""
+        # Sample radius from normal distribution
+        radius = max(5.0, np.random.normal(self.zone_radius, self.radius_std))
+        
+        # Find non-overlapping position
+        position = self._find_non_overlapping_position(radius)
+        if position is None:
+            print("Could not find non-overlapping position for new cooling zone")
+            return
 
-        new_zone = CoolingZone(position, self.zone_radius, self.base_lifetime,
+        new_zone = CoolingZone(position, radius, self.base_lifetime,
                                self.zone_temperature, logger=self.logger)
         new_zone.birth_frame = self.frame
         self.zones.append(new_zone)
@@ -104,10 +110,33 @@ class CoolingZoneSystem:
             self.logger.log_event(
                 frame=self.frame, t=None, event="zone_spawn", zone_id=new_zone.id,
                 zone_pos_x=float(position[0]), zone_pos_y=float(position[1]),
-                zone_radius=self.zone_radius, trapped_count=0, extra=None
+                zone_radius=radius, trapped_count=0, extra=None
             )
-        print(f"New cooling zone spawned at {position} with radius {self.zone_radius}")
-        print(f"Zone bounds: x=[{self.bounds[0] + margin}, {self.bounds[1] - margin}], y=[{self.bounds[0] + margin}, {self.bounds[1] - margin}]")
+        print(f"New cooling zone spawned at {position} with radius {radius:.2f}")
+    
+    def _find_non_overlapping_position(self, radius, max_attempts=100):
+        """Find a position that doesn't overlap with existing zones"""
+        margin = radius + 5
+        
+        for attempt in range(max_attempts):
+            x = np.random.uniform(self.bounds[0] + margin, self.bounds[1] - margin)
+            y = np.random.uniform(self.bounds[0] + margin, self.bounds[1] - margin)
+            position = np.array([x, y])
+            
+            # Check if this position overlaps with any existing zone
+            overlaps = False
+            for existing_zone in self.zones:
+                if existing_zone.is_active:
+                    distance = np.linalg.norm(position - existing_zone.position)
+                    min_distance = radius + existing_zone.radius + 5  # 5 unit buffer
+                    if distance < min_distance:
+                        overlaps = True
+                        break
+            
+            if not overlaps:
+                return position
+        
+        return None  # Could not find non-overlapping position
         
     def process_agent(self, agent_idx, agent_pos, agent_vel):
         """Process an agent's interaction with cooling zones"""
@@ -169,7 +198,9 @@ class CoolingZoneSystem:
             self.frames_since_last_spawn = 0
 
         self.frames_since_last_spawn += 1
-        if len(self.zones) == 0 and self.frames_since_last_spawn >= self.spawn_interval:
+        
+        # Spawn new zones if we have fewer than max_concurrent_zones and enough time has passed
+        if len(self.zones) < self.max_concurrent_zones and self.frames_since_last_spawn >= self.spawn_interval:
             self.spawn_zone()
             self.frames_since_last_spawn = 0
     

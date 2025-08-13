@@ -19,38 +19,36 @@ import matplotlib.cm as cm
 from matplotlib.colors import Normalize
 
 ############################ 
-# Flocking State Color Update
+# Flock Color Update
 ############################
-state_colors = np.array([
-    [0, 0.8, 0.2],   # flocking: green
-    [0.0, 0.2, 1.0], # congregated: blue  
-    [1.0, 0.6, 0.1]  # dispersed: orange
+flock_colors = np.array([
+    [1.0, 0.2, 0.2],   # Flock 1: red
+    [0.2, 0.8, 0.2],   # Flock 2: green
+    [0.2, 0.2, 1.0]    # Flock 3: blue
 ])
+
+leader_color = np.array([1.0, 1.0, 0.0])  # Leaders: yellow
 
 ############################
 # Classify States based on Velocity and Neighbor Count
 ############################
 
-def classify_flocking_state(velocities, neighbor_counts):
+def get_agent_colors(sim):
     """
-    Classify agent states based on velocity magnitude and neighbor count
-    - High velocity, few neighbors: dispersed (orange)
-    - Medium velocity, some neighbors: flocking (green) 
-    - Low velocity, many neighbors: congregated (blue)
+    Get colors for all agents based on their flock membership
+    Leaders get special yellow color
     """
-    states = np.zeros(len(velocities), dtype=int)
+    n = len(sim.agents)
+    colors = np.zeros((n, 3))
     
-    for i, (vel, neighbors) in enumerate(zip(velocities, neighbor_counts)):
-        speed = np.linalg.norm(vel)
-        
-        if speed < 2.0 and neighbors >= 3:
-            states[i] = 1  # congregated (blue)
-        elif speed >= 2.0 and neighbors <= 2:
-            states[i] = 2  # dispersed (orange)
+    for i in range(n):
+        if sim.is_leader(i):
+            colors[i] = leader_color
         else:
-            states[i] = 0  # flocking (green)
+            flock_id = sim.get_agent_flock(i)
+            colors[i] = flock_colors[flock_id]
     
-    return states
+    return colors
 
 ############################
 # Init Scatter Plot
@@ -62,10 +60,10 @@ def setup_visualization(bounds, obstacles):
     ax.set_ylim(bounds)
     # Equal Aspect Ratio 
     ax.set_aspect('equal', adjustable='box')
-    scat = ax.scatter([], [], s=15, animated=True, edgecolors='none')
+    scat = ax.scatter([], [], s=25, animated=True, edgecolors='black', linewidths=0.5)
     
-    # Initialize quiver with dummy data that will be updated
-    quiver = ax.quiver([0], [0], [0], [0], scale=50, alpha=0.7, animated=True)
+    # Initialize quiver with dummy data that will be updated (disabled)
+    quiver = None  # Force arrows disabled
     
     title = ax.text(0.02, 1.02, '', transform=ax.transAxes)
 
@@ -88,7 +86,7 @@ def create_update_function(sim, temperature_schedule, sample_time, sigma, epsilo
                            scat, quiver, title, kinetic_temperatures, time_log, beacon_circles, ax, metrics=None, 
                            render_interval=10):
     counter = [0]
-    current_quiver = [quiver]  # Store quiver in a list so we can modify it
+    # current_quiver disabled - no force arrows
 
     def compute_kinetic_temperature(agents, mass=1, kB=1):
         velocities = agents[:, 2:]
@@ -123,9 +121,7 @@ def create_update_function(sim, temperature_schedule, sample_time, sigma, epsilo
             last_temp = temp
             positions = sim.agents[:, :2]
             velocities = sim.agents[:, 2:]
-            neighbor_counts = compute_neighbor_counts(sim.agents)
-            states = classify_flocking_state(velocities, neighbor_counts)
-            colors = state_colors[states]
+            colors = get_agent_colors(sim)
             
             # Log initial state
             T_kin = compute_kinetic_temperature(sim.agents)
@@ -201,7 +197,7 @@ def create_update_function(sim, temperature_schedule, sample_time, sigma, epsilo
                 
                 # No external forces needed for flocking
                 external_forces = np.zeros((len(sim.agents), 2))
-                sim.update(external_forces, temp)
+                sim.update(external_forces, temp, actual_frame)
                 
                 # Log data every simulation step
                 T_kin = compute_kinetic_temperature(sim.agents)
@@ -235,9 +231,7 @@ def create_update_function(sim, temperature_schedule, sample_time, sigma, epsilo
             # Compute visualization data after simulation steps
             positions = sim.agents[:, :2]
             velocities = sim.agents[:, 2:]
-            neighbor_counts = compute_neighbor_counts(sim.agents)
-            states = classify_flocking_state(velocities, neighbor_counts)
-            colors = state_colors[states]
+            colors = get_agent_colors(sim)
 
         # Update goal beacon visualization
         if sim.goal_beacons:
@@ -277,28 +271,16 @@ def create_update_function(sim, temperature_schedule, sample_time, sigma, epsilo
         scat.set_offsets(positions)
         scat.set_facecolor(colors)
         
-        # Update velocity arrows (quiver plot) - remove old and create new
-        if current_quiver[0] is not None:
-            current_quiver[0].remove()
-        
-        if len(positions) > 0:
-            # Scale velocities for better visualization
-            vel_scale = 2.0
-            scaled_vels = velocities * vel_scale
-            current_quiver[0] = ax.quiver(positions[:, 0], positions[:, 1], 
-                              scaled_vels[:, 0], scaled_vels[:, 1], 
-                              scale=50, alpha=0.6, width=0.002, color='red')
-        else:
-            current_quiver[0] = ax.quiver([0], [0], [0], [0], scale=50, alpha=0.6)
+        # Force arrows disabled - no quiver updates needed
         
         # Show the rendered frame number (0, 10, 20, 30, ...)
         display_frame = frame * render_interval
         if sim.goal_beacons:
             num_beacons = len(sim.goal_beacons.beacons)
             total_trapped = sum(len(beacon.trapped_agents) for beacon in sim.goal_beacons.beacons)
-            title.set_text(f"Time {display_frame * 0.005} | Temp = {last_temp:.1f} | Beacons: {num_beacons} | Trapped: {total_trapped}")
+            title.set_text(f"Time {display_frame * 0.005} | Beacons: {num_beacons} | Trapped: {total_trapped}")
         else:
-            title.set_text(f"Time {display_frame * 0.005} | Temp = {last_temp:.1f}")
+            title.set_text(f"Time {display_frame * 0.005} | Flocking Simulation")
             
         counter[0] += 1
         

@@ -28,16 +28,18 @@ class GoalBeacon:
         self.birth_frame = None
         self.first_arrival_frame = None
         
-    def add_agent(self, agent_idx):
+    def add_agent(self, agent_idx, is_leader=False):
         """Add an agent to this goal beacon"""
         if agent_idx not in self.trapped_agents:
             self.trapped_agents.add(agent_idx)
             print(f"Agent {agent_idx} entered goal beacon at {self.position}")
             
-            # Start lifetime countdown if this is the first agent
-            if not self.lifetime_started:
+            # Start lifetime countdown only if this is a follower (not leader)
+            if not self.lifetime_started and not is_leader:
                 self.lifetime_started = True
-                print(f"Goal beacon lifetime countdown started!")
+                print(f"Goal beacon lifetime countdown started by follower agent {agent_idx}!")
+            elif is_leader:
+                print(f"Leader agent {agent_idx} entered beacon - countdown NOT started")
             
             self.update_lifetime()
     
@@ -143,12 +145,12 @@ class GoalBeaconSystem:
         print(f"New goal beacon spawned at {position} with radius {self.beacon_radius}")
         print(f"Beacon bounds: x=[{self.bounds[0] + margin}, {self.bounds[1] - margin}], y=[{self.bounds[0] + margin}, {self.bounds[1] - margin}]")
         
-    def process_agent(self, agent_idx, agent_pos, agent_vel):
+    def process_agent(self, agent_idx, agent_pos, agent_vel, is_leader=False):
         """Process an agent's interaction with goal beacons"""
         if agent_idx not in self.agent_beacon_map:
             for beacon in self.beacons:
                 if beacon.is_active and beacon.is_inside(agent_pos):
-                    beacon.add_agent(agent_idx)
+                    beacon.add_agent(agent_idx, is_leader=is_leader)
                     self.agent_beacon_map[agent_idx] = beacon
                     if beacon.first_arrival_frame is None:
                         beacon.first_arrival_frame = self.frame
@@ -158,7 +160,8 @@ class GoalBeaconSystem:
                                 beacon_pos_x=float(beacon.position[0]), beacon_pos_y=float(beacon.position[1]),
                                 beacon_radius=beacon.radius, trapped_count=len(beacon.trapped_agents), extra=None
                             )
-                    print(f"DEBUG: Agent {agent_idx} entered beacon at {beacon.position}")
+                    leader_status = "leader" if is_leader else "follower"
+                    print(f"DEBUG: Agent {agent_idx} ({leader_status}) entered beacon at {beacon.position}")
                     break
     
     def is_agent_trapped(self, agent_idx):

@@ -13,35 +13,41 @@ from metrics import MetricsLogger
 
 class GoalBeacon:
     _next_id = 0
-    def __init__(self, position, radius, base_lifetime, velocity_damping=0.95,
+    def __init__(self, position, radius, base_lifetime, velocity_damping=0.985,
                  logger: Optional[MetricsLogger]=None):
         self.id = GoalBeacon._next_id; GoalBeacon._next_id += 1
         self.position = position
         self.radius = radius
         self.base_lifetime = base_lifetime
-        self.velocity_damping = velocity_damping  # Factor to scale down velocities inside beacon
+        self.velocity_damping = velocity_damping
         self.trapped_agents = set()
-        self.frames_remaining = None  # set when first agent enters
+        self.frames_remaining = None
         self.is_active = True
         self.lifetime_started = False
         self.logger = logger
         self.birth_frame = None
         self.first_arrival_frame = None
+        self.owner_flock_id = None  # REQUIRED reservation
         
-    def add_agent(self, agent_idx, is_leader=False):
+    def add_agent(self, agent_idx, is_leader=False, flock_id=None):
         """Add an agent to this goal beacon"""
-        if agent_idx not in self.trapped_agents:
-            self.trapped_agents.add(agent_idx)
-            print(f"Agent {agent_idx} entered goal beacon at {self.position}")
-            
-            # Start lifetime countdown only if this is a follower (not leader)
-            if not self.lifetime_started and not is_leader:
-                self.lifetime_started = True
-                print(f"Goal beacon lifetime countdown started by follower agent {agent_idx}!")
-            elif is_leader:
-                print(f"Leader agent {agent_idx} entered beacon - countdown NOT started")
-            
-            self.update_lifetime()
+        if agent_idx in self.trapped_agents:
+            return
+        self.trapped_agents.add(agent_idx)
+
+        # Reservation: first follower claims the beacon
+        if self.owner_flock_id is None and not is_leader and flock_id is not None:
+            self.owner_flock_id = flock_id
+            print(f"Goal beacon at {self.position} claimed by flock {flock_id}")
+
+        # Countdown starts only when a follower enters
+        if not self.lifetime_started and not is_leader:
+            self.lifetime_started = True
+            print(f"Goal beacon lifetime countdown started by follower agent {agent_idx}!")
+        elif is_leader:
+            print(f"Leader agent {agent_idx} entered beacon - countdown NOT started")
+
+        self.update_lifetime()
     
     def update_lifetime(self):
         """Update the lifetime based on number of trapped agents, accounting for elapsed time."""
@@ -61,38 +67,24 @@ class GoalBeacon:
         distance = np.linalg.norm(position - self.position)
         return distance <= self.radius
     
-    def get_goal_force(self, agent_pos, agent_vel, c1_gamma=5.0, c2_gamma=2.0):
+    def get_goal_force(self, agent_pos, agent_vel, agent_flock_id=None, c1_gamma=5.0, c2_gamma=2.0):
         """
         Calculate goal beacon force for an agent using Olfati-Saber gamma agent formulation
         Returns force towards beacon center with velocity damping
         """
         if not self.is_active:
             return np.zeros(2)
-            
-        # Direction from agent to beacon center
-        direction_to_beacon = self.position - agent_pos
-        distance = np.linalg.norm(direction_to_beacon)
-        
-        # Avoid division by zero
-        if distance < 1e-6:
+        # Only owner flock gets attraction
+        if self.owner_flock_id is not None and agent_flock_id != self.owner_flock_id:
             return np.zeros(2)
-        
-        # Olfati-Saber gamma agent formulation adapted for 2D
-        # u_gamma = -c1_gamma * sigma_1(agent_p - gamma_pos) - c2_gamma * agent_q
-        def sigma_1(z):
-            """Smooth version of identity function"""
-            norm_z = np.linalg.norm(z)
-            if norm_z < 1e-6:
-                return z
-            return z / np.sqrt(1 + norm_z ** 2)
-        
-        # Attraction to beacon position
-        position_term = -c1_gamma * sigma_1(-direction_to_beacon)  # Note: negated for attraction
-        
-        # Velocity damping term
-        velocity_term = -c2_gamma * agent_vel
-        
-        return position_term + velocity_term
+
+        d = self.position - agent_pos
+        dist = np.linalg.norm(d)
+        if dist < 1e-6:
+            return -c2_gamma * agent_vel
+        pos_term = -c1_gamma * (-(d / dist))  # normalized attraction
+        vel_term = -c2_gamma * agent_vel
+        return pos_term + vel_term
     
     def update(self):
         """Update the goal beacon state"""
@@ -111,7 +103,7 @@ class GoalBeacon:
         return self.trapped_agents.copy()
 
 class GoalBeaconSystem:
-    def __init__(self, bounds, beacon_radius=15.0, spawn_interval=500, base_lifetime=300, velocity_damping=0.95,
+    def __init__(self, bounds, beacon_radius=15.0, spawn_interval=500, base_lifetime=300, velocity_damping=0.985,
                  logger: Optional[MetricsLogger]=None):
         self.bounds = bounds
         self.beacon_radius = beacon_radius
@@ -123,6 +115,7 @@ class GoalBeaconSystem:
         self.agent_beacon_map = {}  # Maps agent_idx to beacon
         self.logger = logger
         self.frame = 0  # will be set by caller each tick
+        self._owner = None  # Back-reference to engine
         self.spawn_beacon()
         
     def spawn_beacon(self):
@@ -147,21 +140,22 @@ class GoalBeaconSystem:
         
     def process_agent(self, agent_idx, agent_pos, agent_vel, is_leader=False):
         """Process an agent's interaction with goal beacons"""
+        flock_id = self._owner.get_agent_flock(agent_idx) if self._owner else None
         if agent_idx not in self.agent_beacon_map:
-            for beacon in self.beacons:
-                if beacon.is_active and beacon.is_inside(agent_pos):
-                    beacon.add_agent(agent_idx, is_leader=is_leader)
-                    self.agent_beacon_map[agent_idx] = beacon
-                    if beacon.first_arrival_frame is None:
-                        beacon.first_arrival_frame = self.frame
+            for b in self.beacons:
+                if b.is_active and b.is_inside(agent_pos):
+                    b.add_agent(agent_idx, is_leader=is_leader, flock_id=flock_id)
+                    self.agent_beacon_map[agent_idx] = b
+                    if b.first_arrival_frame is None:
+                        b.first_arrival_frame = self.frame
                         if self.logger:
                             self.logger.log_event(
-                                frame=self.frame, t=None, event="first_arrival", beacon_id=beacon.id,
-                                beacon_pos_x=float(beacon.position[0]), beacon_pos_y=float(beacon.position[1]),
-                                beacon_radius=beacon.radius, trapped_count=len(beacon.trapped_agents), extra=None
+                                frame=self.frame, t=None, event="first_arrival", beacon_id=b.id,
+                                beacon_pos_x=float(b.position[0]), beacon_pos_y=float(b.position[1]),
+                                beacon_radius=b.radius, trapped_count=len(b.trapped_agents), extra=None
                             )
                     leader_status = "leader" if is_leader else "follower"
-                    print(f"DEBUG: Agent {agent_idx} ({leader_status}) entered beacon at {beacon.position}")
+                    print(f"DEBUG: Agent {agent_idx} ({leader_status}) entered beacon at {b.position}")
                     break
     
     def is_agent_trapped(self, agent_idx):
@@ -200,6 +194,14 @@ class GoalBeaconSystem:
             
         return forces
     
+    def get_goal_force_for_agent(self, pos, vel, agent_flock_id=None):
+        """Get goal beacon force for a single agent (used for leaders)"""
+        total = np.zeros(2)
+        for b in self.beacons:
+            if b.is_active:
+                total += b.get_goal_force(pos, vel, agent_flock_id=agent_flock_id)
+        return total
+    
     def update(self):
         """Update all goal beacons and spawn new ones"""
         active_beacons = []
@@ -233,5 +235,5 @@ class GoalBeaconSystem:
     
     def get_active_beacons(self):
         """Get list of active goal beacons for visualization"""
-        return [(beacon.position, beacon.radius, len(beacon.trapped_agents)) 
-                for beacon in self.beacons if beacon.is_active]
+        return [(b.position, b.radius, len(b.trapped_agents), b.owner_flock_id)
+                for b in self.beacons if b.is_active]

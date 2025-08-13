@@ -37,7 +37,7 @@ goal_beacon_config = {
     'beacon_radius': 10.0,        # radius of goal beacons
     'spawn_interval': 400,        # frames between beacon spawns when no beacons exist
     'base_lifetime': 1000,        # base lifetime of beacons in frames
-    'velocity_damping': 0.95,     # velocity damping factor inside beacon
+    'velocity_damping': 0.985,    # softer velocity damping factor inside beacon
     'logger': None                # will be set below
 }
 
@@ -127,7 +127,7 @@ def update_animation(animation_frame):
     scat.set_facecolor(frame_info['colors'])
     
     # Add goal beacons
-    for beacon_pos, beacon_radius, num_agents in frame_info['active_beacons']:
+    for beacon_pos, beacon_radius, num_agents, owner_flock in frame_info['active_beacons']:
         if num_agents == 0:
             color = 'cyan'
             beacon_alpha = 0.3
@@ -137,6 +137,12 @@ def update_animation(animation_frame):
         else:
             color = 'darkblue'
             beacon_alpha = 0.7
+        
+        # Color by owner flock if available
+        if owner_flock is not None:
+            flock_colors = {0: 'red', 1: 'green', 2: 'blue'}
+            color = flock_colors.get(owner_flock, 'cyan')
+            beacon_alpha = 0.8
         
         circle = plt.Circle(beacon_pos, beacon_radius, fill=False, color=color, 
                           linestyle='-', alpha=beacon_alpha, linewidth=3)
@@ -232,7 +238,7 @@ if frame_data:
         circle.remove()
     beacon_circles.clear()
     
-    for beacon_pos, beacon_radius, num_agents in final_frame['active_beacons']:
+    for beacon_pos, beacon_radius, num_agents, owner_flock in final_frame['active_beacons']:
         if num_agents == 0:
             color = 'cyan'
             beacon_alpha = 0.3
@@ -242,6 +248,12 @@ if frame_data:
         else:
             color = 'darkblue'
             beacon_alpha = 0.7
+        
+        # Color by owner flock if available
+        if owner_flock is not None:
+            flock_colors = {0: 'red', 1: 'green', 2: 'blue'}
+            color = flock_colors.get(owner_flock, 'cyan')
+            beacon_alpha = 0.8
         
         circle = plt.Circle(beacon_pos, beacon_radius, fill=False, color=color, 
                           linestyle='-', alpha=beacon_alpha, linewidth=3)

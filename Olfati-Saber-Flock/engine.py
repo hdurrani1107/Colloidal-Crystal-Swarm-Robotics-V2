@@ -150,6 +150,14 @@ class multi_agent:
         self.D = 6  # Desired distance
         self.eps = 0.1  # Smoothing parameter
         
+        # Pre-compute agent metadata for optimization
+        self.agent_flock_ids = np.zeros(number, dtype=int)
+        for fid, agents in self.flocks.items():
+            self.agent_flock_ids[agents] = fid
+        
+        # Cache frequently used values
+        self.r_alpha = sigma_norm(np.array([[self.R]]), self.eps)[0, 0]
+        
         # Control gains
         self.c1_alpha = 5  # Inter-agent interaction gain
         self.c2_alpha = 2 * np.sqrt(self.c1_alpha)   # Velocity alignment gain
@@ -196,11 +204,8 @@ class multi_agent:
         return closest_beacon
     
     def get_agent_flock(self, agent_idx):
-        """Get which flock an agent belongs to"""
-        for flock_id, agent_list in self.flocks.items():
-            if agent_idx in agent_list:
-                return flock_id
-        return 0  # Default to flock 0
+        """Get which flock an agent belongs to - now uses cached array"""
+        return self.agent_flock_ids[agent_idx]
     
     def is_leader(self, agent_idx):
         """Check if agent is a leader"""
@@ -213,9 +218,9 @@ class multi_agent:
         P = self.agents[:, :2]
         V = self.agents[:, 2:]
 
-        k_beacon = 1.5   # attraction
-        k_damp   = 1.0   # leader velocity damping
-        k_tether = 0.3   # leader to flock centroid
+        k_beacon = 3.0   # attraction (increased)
+        k_damp   = 0.5   # leader velocity damping (reduced)
+        k_tether = 0.1   # leader to flock centroid (reduced)
         fmax     = 10.0  # clamp
 
         for flock_id, leader_idx in self.leaders.items():
@@ -225,15 +230,34 @@ class multi_agent:
             f = np.zeros(2)
 
             b = self.get_closest_beacon(pL)
+            beacon_force = np.zeros(2)
             if b is not None and b.is_active:
                 d = b.position - pL
                 dist = np.linalg.norm(d) + 1e-6
-                f += k_beacon * (d / dist) - k_damp * vL  # normalized PD
+                beacon_force = k_beacon * (d / dist) - k_damp * vL  # normalized PD
+                f += beacon_force
+                
+                # Debug output (first few frames only)
+                if hasattr(self, '_debug_counter'):
+                    self._debug_counter += 1
+                else:
+                    self._debug_counter = 0
+                    
+                if self._debug_counter < 5:  # First 5 frames only
+                    print(f"Leader {leader_idx}: beacon at {b.position}, dist={dist:.1f}, beacon_force_mag={np.linalg.norm(beacon_force):.3f}")
+            else:
+                if hasattr(self, '_debug_counter') and self._debug_counter < 5:
+                    print(f"Leader {leader_idx}: NO BEACON FOUND")
 
             # centroid tether
             flock_idxs = np.array(self.flocks[flock_id], dtype=int)
             centroid = P[flock_idxs].mean(axis=0)
-            f += k_tether * (centroid - pL)
+            tether_force = k_tether * (centroid - pL)
+            f += tether_force
+            
+            # Debug centroid tether
+            if hasattr(self, '_debug_counter') and self._debug_counter < 5:
+                print(f"Leader {leader_idx}: centroid={centroid}, tether_force_mag={np.linalg.norm(tether_force):.3f}")
 
             # clamp
             m = np.linalg.norm(f)
@@ -257,19 +281,20 @@ class multi_agent:
         self.goal_beacons._owner = self
     
     def get_adjacency_matrix(self):
-        """Get adjacency matrix for agents within interaction range and same flock"""
+        """Vectorized adjacency matrix computation"""
         n = len(self.agents)
-        adj = np.zeros((n, n), dtype=bool)
         positions = self.agents[:, :2]
-        r_alpha = sigma_norm(np.array([[self.R]]), self.eps)[0, 0]
         
-        for i in range(n):
-            fi = self.get_agent_flock(i)
-            for j in range(n):
-                if i == j or self.get_agent_flock(j) != fi:
-                    continue
-                sij = sigma_norm(positions[j] - positions[i], self.eps)
-                adj[i, j] = (sij <= r_alpha)
+        # Vectorized distance computation
+        pos_diff = positions[:, np.newaxis, :] - positions[np.newaxis, :, :]
+        sigma_distances = sigma_norm(pos_diff.reshape(-1, 2), self.eps).reshape(n, n)
+        
+        # Same flock mask using pre-computed flock IDs
+        same_flock = self.agent_flock_ids[:, np.newaxis] == self.agent_flock_ids[np.newaxis, :]
+        
+        # Adjacency: same flock + within range + not self
+        adj = same_flock & (sigma_distances <= self.r_alpha) & ~np.eye(n, dtype=bool)
+        
         return adj
     
     def compute_flocking_forces(self):
@@ -314,24 +339,29 @@ class multi_agent:
         return forces
     
     def compute_interflock_repulsion(self):
-        """Compute purely repulsive inter-flock forces"""
+        """Vectorized inter-flock repulsion computation"""
         n = len(self.agents)
-        F = np.zeros((n, 2))
         P = self.agents[:, :2]
-        R = self.inter_flock_R
-        k = self.k_inter
         
-        for i in range(n):
-            fi = self.get_agent_flock(i)
-            for j in range(n):
-                if i == j or self.get_agent_flock(j) == fi:
-                    continue
-                d = P[j] - P[i]
-                dist = np.linalg.norm(d) + 1e-6
-                if dist < R:
-                    w = (R - dist) / R
-                    F[i] += -k * w * (d / dist)
-        return F
+        # Vectorized pairwise differences and distances
+        pos_diff = P[:, np.newaxis, :] - P[np.newaxis, :, :]  # Shape: (n, n, 2)
+        distances = np.linalg.norm(pos_diff, axis=2) + 1e-6  # Shape: (n, n)
+        
+        # Different flock mask using pre-computed flock IDs
+        different_flock = self.agent_flock_ids[:, np.newaxis] != self.agent_flock_ids[np.newaxis, :]
+        in_range = distances < self.inter_flock_R
+        
+        # Combined mask: different flock + in range + not self
+        mask = different_flock & in_range & ~np.eye(n, dtype=bool)
+        
+        # Vectorized force calculation
+        weights = np.where(mask, (self.inter_flock_R - distances) / self.inter_flock_R, 0)
+        directions = pos_diff / distances[:, :, np.newaxis]  # Safe due to 1e-6 offset
+        
+        # Sum repulsive forces for each agent
+        forces = -self.k_inter * np.sum(weights[:, :, np.newaxis] * directions, axis=1)
+        
+        return forces
     
     def compute_obstacle_forces(self):
         """Compute repulsive forces from obstacles"""
@@ -365,21 +395,20 @@ class multi_agent:
         """Update agent positions and velocities"""
         # No need to update leader goals - they target beacons directly
         
+        # Single position/velocity references for entire update
+        n = len(self.agents)
+        positions = self.agents[:, :2]
+        velocities = self.agents[:, 2:]
+        
         # Update goal beacons first
         if self.goal_beacons:
             self.goal_beacons.frame += 1
             self.goal_beacons.update()
             
-            # Process agent-beacon interactions
-            positions = self.agents[:, :2]
-            velocities = self.agents[:, 2:]
-            for i, (pos, vel) in enumerate(zip(positions, velocities)):
+            # Process agent-beacon interactions using existing position/velocity refs
+            for i in range(n):
                 is_leader = self.is_leader(i)
-                self.goal_beacons.process_agent(i, pos, vel, is_leader=is_leader)
-        
-        n = len(self.agents)
-        positions = self.agents[:, :2]
-        velocities = self.agents[:, 2:]
+                self.goal_beacons.process_agent(i, positions[i], velocities[i], is_leader=is_leader)
         
         # Compute all forces
         F_flock  = self.compute_flocking_forces()

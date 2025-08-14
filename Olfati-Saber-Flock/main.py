@@ -28,24 +28,25 @@ from metrics import MetricsLogger
 # Simulation Params
 ##########################
 
-agents = 153
+agents = 150  # Will be divided into 3 flocks of 51 agents each
 sample_time = 0.005  # Smaller timestep for flocking stability
 bounds = [0, 200]
 
-# Goal Beacon Configuration (equivalent to cooling zones)
+# Goal Beacon Configuration (ported from LJ-Swarm cooling zones)
 goal_beacon_config = {
-    'beacon_radius': 10.0,        # radius of goal beacons
-    'spawn_interval': 400,        # frames between beacon spawns when no beacons exist
-    'base_lifetime': 1000,        # base lifetime of beacons in frames
-    'velocity_damping': 0.985,    # softer velocity damping factor inside beacon
-    'logger': None                # will be set below
+    'beacon_radius': 12.0,         # mean radius of goal beacons
+    'radius_std': 2.0,             # standard deviation for radius sampling
+    'max_concurrent_beacons': 3,   # maximum number of active beacons at once
+    'spawn_interval': 400,         # frames between beacon spawns when no beacons exist
+    'base_lifetime': 1000,         # base lifetime of beacons in frames
+    'velocity_damping': 0.985,     # softer velocity damping factor inside beacon
+    'logger': None                 # will be set below
 }
 
 # Continuous simulation until target beacons completed
 target_beacons = 10  # User-configurable number of beacons to complete
 render_interval = 10  # Render every 10th frame for performance
 frame_count = 0
-counter = 0 
 dummy_temp = 0  # Dummy temperature value - not used by Olfati-Saber algorithm
 obstacles = [
 #    (np.array([75, 75]), 10),  # center sphere
@@ -61,8 +62,8 @@ output_dir = "../output"
 os.makedirs(f"{output_dir}/videos", exist_ok=True)
 os.makedirs(f"{output_dir}/graphs", exist_ok=True)
 os.makedirs(f"{output_dir}/metrics/OS_metric", exist_ok=True)
-#metrics = MetricsLogger(out_dir=f"{output_dir}/metrics/OS_metric")
-metrics = None
+metrics = MetricsLogger(out_dir=f"{output_dir}/metrics/OS_metric")
+# metrics = None  # Uncomment to disable metrics
 
 ##########################
 # Init Sim
@@ -99,12 +100,16 @@ def capture_frame_data(frame):
     # Get goal beacon data
     active_beacons = sim.goal_beacons.get_active_beacons() if sim.goal_beacons else []
     
+    # Get virtual leader positions for visualization
+    virtual_leaders = sim.virtual_leaders.copy() if hasattr(sim, 'virtual_leaders') else {}
+    
     # Store frame data
     frame_info = {
         'frame': frame,
         'positions': positions,
         'colors': colors,
         'active_beacons': active_beacons,
+        'virtual_leaders': virtual_leaders,
         'completed_beacons': completed_beacons
     }
     frame_data.append(frame_info)
@@ -154,11 +159,17 @@ def update_animation(animation_frame):
         ax.add_patch(goal_point)
         beacon_circles.append(goal_point)
     
-    # Leaders now target beacons directly - no separate goal markers needed
+    # Add virtual leader markers as stars
+    for flock_id, leader_pos in frame_info.get('virtual_leaders', {}).items():
+        flock_colors = {0: 'red', 1: 'green', 2: 'blue'}
+        color = flock_colors.get(flock_id, 'black')
+        leader_marker = ax.scatter(leader_pos[0], leader_pos[1], s=12, marker='*', 
+                                 color=color, edgecolors='black', linewidths=0.5, alpha=0.9)
+        beacon_circles.append(leader_marker)
     
     # Update title
     time_value = frame_info['frame'] * sample_time
-    title.set_text(f"Time {time_value:.3f}s | 3 Flocks: Red(1), Green(2), Blue(3) | Leaders: Yellow | Completed: {frame_info['completed_beacons']}/{target_beacons}")
+    title.set_text(f"Time {time_value:.3f}s | Olfati-Saber 3 Flocks: Red(0), Green(1), Blue(2) | Virtual Leaders: Stars | Completed: {frame_info['completed_beacons']}/{target_beacons}")
     
     return [scat, title] + beacon_circles
 
@@ -166,9 +177,25 @@ def update_animation(animation_frame):
 # Run Continuous Simulation
 ##########################
 
-from ui import get_agent_colors
+def get_agent_colors(sim):
+    """Get colors for agents based on their flock membership"""
+    n_agents = len(sim.agents)
+    colors = np.zeros((n_agents, 3))  # RGB colors
+    
+    # Flock colors: Red, Green, Blue
+    flock_colors = {
+        0: np.array([1.0, 0.2, 0.2]),  # Red
+        1: np.array([0.2, 1.0, 0.2]),  # Green  
+        2: np.array([0.2, 0.2, 1.0])   # Blue
+    }
+    
+    for agent_idx in range(n_agents):
+        flock_id = sim.get_agent_flock(agent_idx)
+        colors[agent_idx] = flock_colors.get(flock_id, np.array([0.5, 0.5, 0.5]))  # Gray fallback
+    
+    return colors
 
-pbar = tqdm(desc=f"Completing beacons (0/{target_beacons})", unit="beacons")
+pbar = tqdm(desc=f"Completing beacons (0/{target_beacons})", unit=" beacons")
 
 try:
     while completed_beacons < target_beacons:
@@ -264,10 +291,16 @@ if frame_data:
         ax.add_patch(goal_point)
         beacon_circles.append(goal_point)
     
-    # Leaders now target beacons directly - no separate goal markers needed
+    # Add final virtual leader positions as stars
+    for flock_id, leader_pos in final_frame.get('virtual_leaders', {}).items():
+        flock_colors = {0: 'red', 1: 'green', 2: 'blue'}
+        color = flock_colors.get(flock_id, 'black')
+        leader_marker = ax.scatter(leader_pos[0], leader_pos[1], s=12, marker='*', 
+                                 color=color, edgecolors='black', linewidths=0.5, alpha=0.9)
+        beacon_circles.append(leader_marker)
     
     final_time = final_frame['frame'] * sample_time
-    title.set_text(f"Final State - Time {final_time:.3f}s | 3 Flocks with Leaders | Completed: {completed_beacons}/{target_beacons}")
+    title.set_text(f"Final State - Time {final_time:.3f}s | Olfati-Saber 3 Flocks with Virtual Leaders | Completed: {completed_beacons}/{target_beacons}")
     plt.savefig(f"{output_dir}/videos/final_olfati_saber_state.png", dpi=150)
     print(f"Final state image saved to {output_dir}/videos/final_olfati_saber_state.png")
 
@@ -303,6 +336,8 @@ plt.tight_layout()
 plt.savefig(f"{output_dir}/graphs/olfati_saber_beacon_completion_analysis.png")
 plt.show()
 
-#metrics.save()
-#print(f"Saved metrics to {output_dir}/metrics/OS_metric")
-#print("Olfati-Saber flocking simulation completed!")
+# Save metrics if enabled
+if metrics:
+    metrics.save()
+    print(f"Saved metrics to {output_dir}/metrics/OS_metric")
+print("Olfati-Saber flocking simulation completed!")

@@ -279,7 +279,8 @@ if zone_completion_times:
     if len(zone_completion_times) > 1:
         total_time = zone_completion_times[-1] - zone_completion_times[0]
         avg_rate = len(zone_completion_times) / total_time if total_time > 0 else 0
-        plt.text(0.02, 0.98, f"Avg completion rate: {avg_rate:.3f} zones/s", 
+        avg_time_per_zone = total_time / len(zone_completion_times) if len(zone_completion_times) > 0 else 0
+        plt.text(0.02, 0.98, f"Avg completion rate: {avg_rate:.3f} zones/s\nAvg time per zone: {avg_time_per_zone:.3f}s", 
                 transform=plt.gca().transAxes, verticalalignment='top',
                 bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.8))
 else:

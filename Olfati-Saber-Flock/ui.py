@@ -36,17 +36,14 @@ leader_color = np.array([1.0, 1.0, 0.0])  # Leaders: yellow
 def get_agent_colors(sim):
     """
     Get colors for all agents based on their flock membership
-    Leaders get special yellow color
+    Flock 0: Red, Flock 1: Green, Flock 2: Blue
     """
     n = len(sim.agents)
     colors = np.zeros((n, 3))
     
     for i in range(n):
-        if sim.is_leader(i):
-            colors[i] = leader_color
-        else:
-            flock_id = sim.get_agent_flock(i)
-            colors[i] = flock_colors[flock_id]
+        flock_id = sim.get_agent_flock(i)
+        colors[i] = flock_colors[flock_id]
     
     return colors
 
@@ -60,7 +57,7 @@ def setup_visualization(bounds, obstacles):
     ax.set_ylim(bounds)
     # Equal Aspect Ratio 
     ax.set_aspect('equal', adjustable='box')
-    scat = ax.scatter([], [], s=25, animated=True, edgecolors='black', linewidths=0.5)
+    scat = ax.scatter([], [], s=10, animated=True, edgecolors='none')
     
     # Initialize quiver with dummy data that will be updated (disabled)
     quiver = None  # Force arrows disabled

@@ -35,17 +35,15 @@ class GoalBeacon:
             return
         self.trapped_agents.add(agent_idx)
 
-        # Reservation: first follower claims the beacon
-        if self.owner_flock_id is None and not is_leader and flock_id is not None:
+        # Reservation: first agent claims the beacon for their flock
+        if self.owner_flock_id is None and flock_id is not None:
             self.owner_flock_id = flock_id
-            print(f"Goal beacon at {self.position} claimed by flock {flock_id}")
+            print(f"Goal beacon at {self.position} reserved by flock {flock_id} (agent {agent_idx})")
 
-        # Countdown starts only when a follower enters
-        if not self.lifetime_started and not is_leader:
+        # Countdown starts when any agent enters (modified from LJ-Swarm logic)
+        if not self.lifetime_started:
             self.lifetime_started = True
-            print(f"Goal beacon lifetime countdown started by follower agent {agent_idx}!")
-        elif is_leader:
-            print(f"Leader agent {agent_idx} entered beacon - countdown NOT started")
+            print(f"Goal beacon lifetime countdown started by agent {agent_idx}!")
 
         self.update_lifetime()
     
@@ -70,11 +68,11 @@ class GoalBeacon:
     def get_goal_force(self, agent_pos, agent_vel, agent_flock_id=None, c1_gamma=5.0, c2_gamma=2.0):
         """
         Calculate goal beacon force for an agent using Olfati-Saber gamma agent formulation
-        Returns force towards beacon center with velocity damping
+        No temperature dependency - just velocity dampening inside beacon
         """
         if not self.is_active:
             return np.zeros(2)
-        # Only owner flock gets attraction
+        # Only owner flock gets attraction (first-come-first-served reservation)
         if self.owner_flock_id is not None and agent_flock_id != self.owner_flock_id:
             return np.zeros(2)
 
@@ -82,7 +80,10 @@ class GoalBeacon:
         dist = np.linalg.norm(d)
         if dist < 1e-6:
             return -c2_gamma * agent_vel
-        pos_term = -c1_gamma * (-(d / dist))  # normalized attraction
+        
+        # Olfati-Saber gamma force (attraction to beacon + velocity damping)
+        from engine import sigma_1
+        pos_term = -c1_gamma * sigma_1(agent_pos - self.position)
         vel_term = -c2_gamma * agent_vel
         return pos_term + vel_term
     
@@ -104,28 +105,40 @@ class GoalBeacon:
 
 class GoalBeaconSystem:
     def __init__(self, bounds, beacon_radius=15.0, spawn_interval=500, base_lifetime=300, velocity_damping=0.985,
-                 logger: Optional[MetricsLogger]=None):
+                 max_concurrent_beacons=3, radius_std=2.0, logger: Optional[MetricsLogger]=None):
         self.bounds = bounds
-        self.beacon_radius = beacon_radius
+        self.beacon_radius = beacon_radius  # Mean radius for normal distribution
+        self.radius_std = radius_std        # Standard deviation for radius sampling
         self.spawn_interval = spawn_interval
         self.base_lifetime = base_lifetime
         self.velocity_damping = velocity_damping
+        self.max_concurrent_beacons = max_concurrent_beacons
         self.beacons = []
         self.frames_since_last_spawn = 0
         self.agent_beacon_map = {}  # Maps agent_idx to beacon
         self.logger = logger
         self.frame = 0  # will be set by caller each tick
         self._owner = None  # Back-reference to engine
-        self.spawn_beacon()
+        
+        # Spawn all max_concurrent_beacons at initialization
+        for i in range(self.max_concurrent_beacons):
+            success = self.spawn_beacon()
+            if not success:
+                print(f"Warning: Could only spawn {i} out of {self.max_concurrent_beacons} initial beacons")
+                break
         
     def spawn_beacon(self):
-        """Spawn a new goal beacon at a random location"""
-        margin = self.beacon_radius + 5
-        x = np.random.uniform(self.bounds[0] + margin, self.bounds[1] - margin)
-        y = np.random.uniform(self.bounds[0] + margin, self.bounds[1] - margin)
-        position = np.array([x, y])
+        """Spawn a new goal beacon at a random location with random radius from normal distribution"""
+        # Sample radius from normal distribution (matching LJ-Swarm logic)
+        radius = max(5.0, np.random.normal(self.beacon_radius, self.radius_std))
+        
+        # Find non-overlapping position
+        position = self._find_non_overlapping_position(radius)
+        if position is None:
+            print("Could not find non-overlapping position for new goal beacon")
+            return False
 
-        new_beacon = GoalBeacon(position, self.beacon_radius, self.base_lifetime,
+        new_beacon = GoalBeacon(position, radius, self.base_lifetime,
                                self.velocity_damping, logger=self.logger)
         new_beacon.birth_frame = self.frame
         self.beacons.append(new_beacon)
@@ -133,10 +146,35 @@ class GoalBeaconSystem:
             self.logger.log_event(
                 frame=self.frame, t=None, event="beacon_spawn", beacon_id=new_beacon.id,
                 beacon_pos_x=float(position[0]), beacon_pos_y=float(position[1]),
-                beacon_radius=self.beacon_radius, trapped_count=0, extra=None
+                beacon_radius=radius, trapped_count=0, extra=None
             )
-        print(f"New goal beacon spawned at {position} with radius {self.beacon_radius}")
-        print(f"Beacon bounds: x=[{self.bounds[0] + margin}, {self.bounds[1] - margin}], y=[{self.bounds[0] + margin}, {self.bounds[1] - margin}]")
+        print(f"New goal beacon spawned at {position} with radius {radius:.2f}")
+        return True
+    
+    def _find_non_overlapping_position(self, radius, max_attempts=100):
+        """Find a position that doesn't overlap with existing beacons"""
+        margin = radius + 5
+        
+        for attempt in range(max_attempts):
+            x = np.random.uniform(self.bounds[0] + margin, self.bounds[1] - margin)
+            y = np.random.uniform(self.bounds[0] + margin, self.bounds[1] - margin)
+            position = np.array([x, y])
+            
+            # Check if this position overlaps with any existing beacon
+            overlaps = False
+            for existing_beacon in self.beacons:
+                if existing_beacon.is_active:
+                    distance = np.linalg.norm(position - existing_beacon.position)
+                    # Ensure minimum separation of at least 25 units between beacon centers
+                    min_distance = max(radius + existing_beacon.radius + 10, 25)
+                    if distance < min_distance:
+                        overlaps = True
+                        break
+            
+            if not overlaps:
+                return position
+        
+        return None  # Could not find non-overlapping position
         
     def process_agent(self, agent_idx, agent_pos, agent_vel, is_leader=False):
         """Process an agent's interaction with goal beacons"""
@@ -229,9 +267,13 @@ class GoalBeaconSystem:
             self.frames_since_last_spawn = 0
 
         self.frames_since_last_spawn += 1
-        if len(self.beacons) == 0 and self.frames_since_last_spawn >= self.spawn_interval:
-            self.spawn_beacon()
-            self.frames_since_last_spawn = 0
+        
+        # Spawn new beacons if we have fewer than max_concurrent_beacons and enough time has passed
+        if len(self.beacons) < self.max_concurrent_beacons and self.frames_since_last_spawn >= self.spawn_interval:
+            success = self.spawn_beacon()
+            if success:
+                self.frames_since_last_spawn = 0
+            # If spawn failed, don't reset timer - will try again next frame
     
     def get_active_beacons(self):
         """Get list of active goal beacons for visualization"""

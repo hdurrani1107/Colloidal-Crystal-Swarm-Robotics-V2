@@ -1,7 +1,9 @@
 #######################################################################
 # schedule.py
 #
-# temperature schedules
+# Copied and Pasted from lj-swarm (Obsolete)
+# Olfati-Saber DOES NOT USE Temperature
+#
 #
 # Author: Humzah Durrani
 #######################################################################

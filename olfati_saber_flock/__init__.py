@@ -1,3 +1,15 @@
-# olfati_saber_flock/__init__.py
+#######################################################################
+# __init__.py
+#
+# Converted into Python Library for pathing purposes
+#
+# Author: Humzah Durrani
+#######################################################################
+
+####################
+# Import Libraries
+####################
+
+
 from .engine import multi_agent
-from .goal_beacon import GoalBeacon
+from .goal_beacon import GoalBeacon 

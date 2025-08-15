@@ -48,7 +48,7 @@ C = np.abs(A - B) / np.sqrt(4 * A * B)
 H = 0.2
 
 #Range and Distance
-R = 12
+R = 12 
 D = 10
 
 #Repulsion Agents

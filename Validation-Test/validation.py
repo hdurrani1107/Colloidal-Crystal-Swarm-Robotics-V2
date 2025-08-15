@@ -6,10 +6,10 @@
 # randomized set of zone positons and radii. Comparison Testing
 #
 # Author: Humzah Durrani
-# AI Disclosure: AI was used to generate code and debug the validation testing
+# AI Disclosure: AI was used
 #################################################################################
 
-# --- Set matplotlib backend before importing pyplot ---
+
 import matplotlib
 matplotlib.use("Agg")  # safe for headless
 
@@ -27,7 +27,7 @@ REPO_ROOT = SCRIPT_DIR.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-# Disambiguated imports from packages
+#Python Libraries Absolute Pathing
 import lj_swarm.engine as lj_engine
 from lj_swarm.cooling_zone import CoolingZone
 

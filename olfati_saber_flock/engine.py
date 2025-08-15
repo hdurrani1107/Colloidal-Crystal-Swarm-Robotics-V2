@@ -1,12 +1,13 @@
-#######################################################################
+##############################################################################
 # engine.py
 #
 # Engine for 2D Olfati-Saber flocking algorithm with goal beacons
 # Complete overhaul based on original 3d_lattice_flock.py algorithm
-# Implements 3 distinct lattice flocks with virtual leaders
+# Implements 3 distinct lattice flocks with virtual leaders at centroids
 #
 # Author: Humzah Durrani
-#######################################################################
+# AI Disclosure: AI was used for feature development, handling and debugging
+##############################################################################
 
 ##########################
 # Importing Libraries
@@ -14,9 +15,9 @@
 import numpy as np
 from olfati_saber_flock.goal_beacon import GoalBeaconSystem
 
-##########################
+#####################################
 # Core Math Functions - Olfati-Saber
-##########################
+#####################################
 
 def sigma_1(z):
     """Smooths version of identity function that avoids singularities at 0"""
@@ -296,8 +297,6 @@ class multi_agent:
         return forces
 
     def setup_goal_beacons(self, beacon_config):
-        """Set up the goal beacon system"""
-        from olfati_saber_flock.goal_beacon import GoalBeaconSystem
         self.goal_beacons = GoalBeaconSystem(
             bounds=self.bounds,
             beacon_radius=beacon_config['beacon_radius'],
@@ -395,7 +394,7 @@ class multi_agent:
         for i in range(n):
             agent_p = self.agents[i, :2]
             u_obs = obs_rep(self.obstacles, agent_p)
-            forces[i] = 20 * u_obs  # Scale obstacle repulsion
+            forces[i] = 20 * u_obs  # Scale obstacle repulsion 
         
         return forces
     

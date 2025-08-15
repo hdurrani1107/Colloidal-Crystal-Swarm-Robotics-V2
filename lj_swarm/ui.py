@@ -133,6 +133,7 @@ def create_update_function(sim, temperature_schedule, sample_time, sigma, epsilo
                 time_log.append(actual_frame * sample_time)
                 
                 # Log metrics for every simulation frame
+                #Clean Up Metrics
                 if sim.cooling_zones and metrics:
                     active_zones = sim.cooling_zones.get_active_zones()
                     num_zones = len(active_zones)
@@ -144,6 +145,8 @@ def create_update_function(sim, temperature_schedule, sample_time, sigma, epsilo
                     arrivals_this_frame = max(0, total_trapped - prev_total)
                     setattr(sim.cooling_zones, f"_prev_total_trapped_{actual_frame}", total_trapped)
 
+                    #Redundant
+                    #Clean up Metrics
                     metrics.log_frame(
                         frame=int(actual_frame),
                         t=float(actual_frame * sample_time),
@@ -173,6 +176,7 @@ def create_update_function(sim, temperature_schedule, sample_time, sigma, epsilo
                 time_log.append(actual_frame * sample_time)
                 
                 # Log metrics for every simulation frame
+                #Clean up Metrics
                 if sim.cooling_zones and metrics:
                     active_zones = sim.cooling_zones.get_active_zones()
                     num_zones = len(active_zones)
@@ -184,6 +188,8 @@ def create_update_function(sim, temperature_schedule, sample_time, sigma, epsilo
                     arrivals_this_frame = max(0, total_trapped - prev_total)
                     setattr(sim.cooling_zones, f"_prev_total_trapped_{actual_frame}", total_trapped)
 
+                    #Redundant
+                    #Clean up Metrics
                     metrics.log_frame(
                         frame=int(actual_frame),
                         t=float(actual_frame * sample_time),

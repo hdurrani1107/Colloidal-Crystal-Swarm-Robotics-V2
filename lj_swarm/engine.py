@@ -4,6 +4,7 @@
 # Engine behind swarm behavior  
 #
 # Author: Humzah Durrani
+# AI Disclosure: Only used for debugging and vectorized force compute
 #######################################################################
 
 ##########################
@@ -13,20 +14,34 @@ import numpy as np
 from lj_swarm.cooling_zone import CoolingZoneSystem
 
 ##########################
-# Multi-Agent Setup
+# Sigmoid Function
 ##########################
 
 def sigma_1(z):
     return z / np.sqrt(1 + z ** 2)
 
+
+############################
+# Temperature based Epsilon
+############################
+
 def epsilon_temp(T, epsilon, alpha):
+    #Unused
     return epsilon * np.exp(-alpha * T)
+
+############################
+# Melt Initial Condition
+############################
 
 def init_melt(agents, init_temp, mass=1, kB=1):
     #Starting off with initial noise sampled from Maxwell Boltzmann Distribution
     N = len(agents)
     std_dev = np.sqrt(kB * init_temp / mass)
     agents[:, 2:] = np.random.normal(0, std_dev, size=(N, 2))
+
+######################################
+# Ideal Hex-Grid Initial Condition
+#######################################
 
 def init_grid(n, bounds, spacing, center=(100, 100)):
     agents = []
@@ -63,6 +78,10 @@ def init_grid(n, bounds, spacing, center=(100, 100)):
 
     return np.array(agents)
 
+#######################################
+# Random No-Overlap Initial Condition
+########################################
+
 def init_grid_random_no_overlap(n, bounds, spacing, max_attempts=10000):
     agents = []
     attempts = 0
@@ -84,9 +103,13 @@ def init_grid_random_no_overlap(n, bounds, spacing, max_attempts=10000):
 
     return np.array(agents)
 
+############################
+# Multi-Agent Class
+############################
 class multi_agent:
 
     def __init__(self, number, sigma, sampletime, bounds, obstacles):
+        #Initial LJ-Swarm Params
         self.dt = sampletime
         self.bounds = bounds
         self.obstacles = obstacles
@@ -98,13 +121,17 @@ class multi_agent:
         # Individual agent temperatures (initially set to system temperature)
         self.agent_temperatures = np.full(number, 150.0)  # Will be updated with actual initial temp
     
+    ############################
+    # Initial Agent Temperature
+    ############################
     def initialize_agent_temperatures(self, initial_temp):
-        """Initialize all agent temperatures to the starting system temperature"""
         self.agent_temperatures.fill(initial_temp)
     
+    ############################
+    # Cooling zone setup
+    ############################
     def setup_cooling_zones(self, zone_config):
-        """Set up the cooling zone system"""
-        from lj_swarm.cooling_zone import CoolingZoneSystem
+        #Cooling Zone Initialization
         self.cooling_zones = CoolingZoneSystem(
             bounds=self.bounds,
             zone_radius=zone_config['zone_radius'],
@@ -116,6 +143,10 @@ class multi_agent:
             logger=zone_config.get('logger', None)
         )
     
+    ############################
+    # Agent Neighbor Count
+    ############################
+
     def compute_neighbor_count(self, i, radius):
         pos_i = self.agents[i, :2]
         count = 0
@@ -127,9 +158,12 @@ class multi_agent:
                 count += 1
         return count
     
+    #################################################
+    # Update Agent Temperature based on Cooling Zone
+    #################################################
+
     def update_agent_temperatures(self, system_temp):
-        """Update individual agent temperatures based on cooling zones"""
-        cooling_rate = 0.05  # How fast agents cool/warm (0.05 = 5% per timestep)
+        cooling_rate = 0.05
         
         for i in range(len(self.agents)):
             if self.cooling_zones and self.cooling_zones.is_agent_trapped(i):
@@ -152,13 +186,17 @@ class multi_agent:
                 temp_diff = system_temp - self.agent_temperatures[i]
                 self.agent_temperatures[i] += cooling_rate * temp_diff
 
+    ###############################################
+    # Compute Forces (Vectorized) (Experimental)
+    ###############################################
+    
     def compute_forces(self, sigma, epsilon, distance, temp, c1_gamma, c2_gamma, alpha=0.5):
         n = len(self.agents)
         positions = self.agents[:, :2]
         
-        ##############################
+        ##################################
         # Vectorized LJ Force Calculation
-        ##############################
+        ###################################
         
         # Compute all pairwise distance vectors at once
         pos_diff = positions[:, np.newaxis, :] - positions[np.newaxis, :, :]  # Shape: (n, n, 2)
@@ -182,9 +220,11 @@ class multi_agent:
         # Sum forces for each agent (broadcasting lj_scalar across direction vectors)
         forces = np.sum(lj_scalar[:, :, np.newaxis] * directions, axis=1)
 
-        ##############################
+        ################################
         # Obstacle Forces (still loop-based for now)
-        ##############################
+        #################################
+        
+        #Toggled off for now
         if self.obstacles:
             for i in range(n):
                 pos_i = positions[i]
@@ -197,9 +237,11 @@ class multi_agent:
                         repulsion_strength = 100  # tune this
                         forces[i] += (repulsion_strength * overlap / dist_to_obs) * (obs_vec)
 
+        
         ##############################
         # Cooling Zone System
         ##############################
+
         if self.cooling_zones:
             for i in range(n):
                 pos_i = positions[i]
@@ -209,10 +251,15 @@ class multi_agent:
 
         return forces
 
+    ############################
+    # Original Compute Forces
+    ############################
     def compute_forces_original(self, sigma, epsilon, distance, temp, c1_gamma, c2_gamma, alpha=0.5):
-        """Original nested loop implementation - kept for validation"""
+        #Kept In-case above failed
         n = len(self.agents)
         forces = np.zeros((n, 2))
+
+        #Nested For-Loop very slow
 
         for i in range(n):
             pos_i = self.agents[i, :2]
@@ -252,6 +299,10 @@ class multi_agent:
 
         return forces
 
+    ###########################
+    # Update everything
+    ############################
+
     def update(self, forces, temp):
         # Update cooling zones first
         if self.cooling_zones:
@@ -270,9 +321,9 @@ class multi_agent:
             #x, y = self.agents[i, :2]
             #f = forces[i]
 
-            ############################
+            #####################################
             #Langevin Thermostat Velocity Update
-            ############################
+            #####################################
 
             mass = 1
             friction = 3

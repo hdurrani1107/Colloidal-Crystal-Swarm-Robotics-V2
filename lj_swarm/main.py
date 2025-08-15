@@ -4,6 +4,7 @@
 # Run simulation from here
 #
 # Author: Humzah Durrani
+# AI Disclosure: Used for Debugging and Handling
 #######################################################################
 
 ##########################
@@ -100,11 +101,11 @@ rendered_frames = []  # Track which frames we rendered
 frame_data = []  # Store frame data for video creation
 
 ##########################
-# Simulation Loop Functions
+# Capture Frame Data
 ##########################
 
 def capture_frame_data(frame):
-    """Capture frame data for video creation"""
+    #Video Creation
     positions = sim.agents[:, :2].copy()
     velocities = sim.agents[:, 2:].copy()
     KE = 0.5 * np.sum(velocities**2, axis=1)
@@ -127,8 +128,12 @@ def capture_frame_data(frame):
     frame_data.append(frame_info)
     return frame_info
 
+##########################
+# Update Animation
+##########################
+
 def update_animation(animation_frame):
-    """Animation function for FuncAnimation"""
+    #Funinmation
     if animation_frame >= len(frame_data):
         return [scat, title] + cooling_zone_circles
         
@@ -166,12 +171,15 @@ def update_animation(animation_frame):
     
     return [scat, title] + cooling_zone_circles
 
-##########################
+###########################3
 # Run Continuous Simulation
-##########################
+############################
 
+#Command Line Progress Bar
 pbar = tqdm(desc=f"Completing cooling zones (0/{target_cooling_zones})", unit="zones")
 
+
+#While loop until target met
 try:
     while completed_zones < target_cooling_zones:
         # Track zones before update
@@ -199,10 +207,11 @@ try:
         frame_count += 1
         
         # Safety check to prevent infinite loop
-        if frame_count > 1000000:  # 1 million frame limit
+        if frame_count > 1000000:
             print(f"Simulation reached maximum frame limit. Completed {completed_zones}/{target_cooling_zones} zones.")
             break
 
+#Compiles video and graphs on Keyboard Interrupt
 except KeyboardInterrupt:
     print(f"\nSimulation interrupted by user at frame {frame_count}")
     print(f"Completed {completed_zones}/{target_cooling_zones} cooling zones")

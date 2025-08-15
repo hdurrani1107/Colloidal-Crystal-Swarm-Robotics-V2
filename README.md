@@ -20,3 +20,8 @@ Olfati-Saber flocking simulation package:
 Validation testing framework:
 - `validation.py` -> Run validation comparison between both algorithms
 - `README.md` -> Detailed validation usage instructions
+
+# To do:
+- Clean up repository for un-used and redundant code
+- Potentially add some autonomous features to LJ-Swarm and validate back
+- Expand Validation Testing and test metrics

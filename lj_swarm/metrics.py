@@ -1,4 +1,11 @@
+#######################################################################
 # metrics.py
+#
+# Redundant and not going to be used.
+#
+# Author: Humzah Durrani
+# AI Disclosure
+#######################################################################
 from dataclasses import dataclass, field
 from typing import List, Dict, Any, Optional
 import csv

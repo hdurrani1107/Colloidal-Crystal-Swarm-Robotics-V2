@@ -1,16 +1,13 @@
 #!/usr/bin/env python3
-"""
-Simple Validation Script for LJ-Swarm vs Olfati-Saber-Flock Comparison
-
-This script creates a simple validation test that:
-1. Generates a random sequence of 10 zone positions and radii
-2. Runs LJ-Swarm simulation with these zones
-3. Runs Olfati-Saber-Flock simulation with the same zones
-4. Repeats for 10 iterations
-5. Creates comparison graphs
-
-Author: Claude Code Assistant
-"""
+#################################################################################
+# main.py
+#
+# Validation Test: 10 Iterations of LJ and Olfati-Saber Simulations over same
+# randomized set of zone positons and radii. Comparison Testing
+#
+# Author: Humzah Durrani
+# AI Disclosure: AI was used to generate code and debug the validation testing
+#################################################################################
 
 # --- Set matplotlib backend before importing pyplot ---
 import matplotlib
@@ -107,21 +104,46 @@ def run_lj_simulation(zones: List[ZoneData], trial_num: int):
         zone_completion_times = []
         start_time = time.time()
         max_frames = 1000000  # Safety limit
+
+        stale = 0
+        STALE_LIMIT = 25000
         
         while completed_zones < target_zones and frame_count < max_frames:
-            zones_before = len(sim.cooling_zones.zones)
+            #zones_before = len(sim.cooling_zones.zones)
+            prev_completed = sim.cooling_zones.completed_total
             
             # Run simulation step
             forces = sim.compute_forces(sigma, epsilon, (2**(1/6)) * sigma, constant_temperature, 10, 10, 0.5)
             sim.update(forces, constant_temperature)
             
-            # Check for completed zones
-            zones_after = len(sim.cooling_zones.zones)
-            if zones_before > zones_after:
-                zones_completed_this_step = zones_before - zones_after
-                completed_zones += zones_completed_this_step
+            now_completed = sim.cooling_zones.completed_total
+            delta = now_completed - prev_completed
+
+            if delta > 0:
+                completed_zones += delta
                 current_time = frame_count * sample_time
-                zone_completion_times.extend([current_time] * zones_completed_this_step)
+                zone_completion_times.extend([current_time] * delta)
+                stale = 0
+            else:
+                stale += 1
+
+            #Optional: Exit Early
+            if (sim.cooling_zones.current_zone_index >= len(sim.cooling_zones.predetermined_zones)
+                    and len(sim.cooling_zones.zones) == 0):
+                break
+            
+            #Stalemate watchdog
+            if stale >= STALE_LIMIT:
+                print("No Progress for too long")
+                return float('inf'), float('inf'), False
+            
+            # Check for completed zones
+            #zones_after = len(sim.cooling_zones.zones)
+            #if zones_before > zones_after:
+            #    zones_completed_this_step = zones_before - zones_after
+            #    completed_zones += zones_completed_this_step
+            #   current_time = frame_count * sample_time
+            #    zone_completion_times.extend([current_time] * zones_completed_this_step)
             
             frame_count += 1
         
@@ -160,21 +182,46 @@ def run_olfati_simulation(zones: List[ZoneData], trial_num: int):
         beacon_completion_times = []
         start_time = time.time()
         max_frames = 1000000  # Safety limit
+
+        stale = 0
+        STALE_LIMIT = 25000
         
         while completed_beacons < target_beacons and frame_count < max_frames:
-            beacons_before = len(sim.goal_beacons.beacons)
+            #beacons_before = len(sim.goal_beacons.beacons)
+            prev_completed = sim.goal_beacons.completed_total
             
             # Run simulation step
             external_forces = np.zeros((len(sim.agents), 2))
             sim.update(external_forces, temp=0, frame=frame_count)
+
+            now_completed = sim.goal_beacons.completed_total
+            delta = now_completed - prev_completed
+
+            if delta > 0:
+                completed_beacons += delta
+                current_time = frame_count * sample_time
+                beacon_completion_times.extend([current_time] * delta)
+                stale = 0
+            else:
+                stale += 1
+
+            #Optional: Exit Early
+            if (sim.goal_beacons.current_beacon_index >= len(sim.goal_beacons.predetermined_zones)
+                    and len(sim.goal_beacons.beacons) == 0):
+                break
+            
+            #Stalemate watchdog
+            if stale >= STALE_LIMIT:
+                print("No Progress for too long")
+                return float('inf'), float('inf'), False
             
             # Check for completed beacons
-            beacons_after = len(sim.goal_beacons.beacons)
-            if beacons_before > beacons_after:
-                beacons_completed_this_step = beacons_before - beacons_after
-                completed_beacons += beacons_completed_this_step
-                current_time = frame_count * sample_time
-                beacon_completion_times.extend([current_time] * beacons_completed_this_step)
+            #beacons_after = len(sim.goal_beacons.beacons)
+            #if beacons_before > beacons_after:
+            #    beacons_completed_this_step = beacons_before - beacons_after
+            #    completed_beacons += beacons_completed_this_step
+            #    current_time = frame_count * sample_time
+            #    beacon_completion_times.extend([current_time] * beacons_completed_this_step)
             
             frame_count += 1
         
@@ -200,6 +247,7 @@ class CustomCoolingZoneSystem:
         self.frames_since_last_spawn = 0
         self.spawn_interval = 400
         self.max_concurrent_zones = 3
+        self.completed_total = 0
         
         # Spawn initial zones
         for i in range(min(self.max_concurrent_zones, len(self.predetermined_zones))):
@@ -258,6 +306,7 @@ class CustomCoolingZoneSystem:
             if zone.update():
                 active_zones.append(zone)
             else:
+                self.completed_total += 1
                 freed_agents.update(zone.get_trapped_agents())
         
         for agent_idx in freed_agents:
@@ -299,7 +348,8 @@ class CustomGoalBeaconSystem:
         self.spawn_interval = 400
         self.max_concurrent_beacons = 3
         self._owner = None
-        
+        self.completed_total = 0
+
         # Spawn initial beacons
         for i in range(min(self.max_concurrent_beacons, len(self.predetermined_zones))):
             self._spawn_next_beacon()
@@ -383,6 +433,7 @@ class CustomGoalBeaconSystem:
             if beacon.update():
                 active_beacons.append(beacon)
             else:
+                self.completed_total += 1
                 freed_agents.update(beacon.get_trapped_agents())
         
         for agent_idx in freed_agents:

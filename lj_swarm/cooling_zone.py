@@ -89,6 +89,7 @@ class CoolingZoneSystem:
         self.agent_zone_map = {}  # Maps agent_idx to zone
         self.logger = logger
         self.frame = 0  # will be set by caller each tick
+        #self.completed_total = 0
         
         # Spawn all max_concurrent_zones at initialization
         for i in range(self.max_concurrent_zones):
@@ -187,6 +188,7 @@ class CoolingZoneSystem:
             if zone.update():
                 active_zones.append(zone)
             else:
+                #self.completed_total += 1
                 freed_agents.update(zone.get_trapped_agents())
                 if self.logger:
                     self.logger.log_event(
@@ -213,6 +215,7 @@ class CoolingZoneSystem:
             if success:
                 self.frames_since_last_spawn = 0
             # If spawn failed, don't reset timer - will try again next frame
+            #self.frame += 1
     
     def get_active_zones(self):
         """Get list of active cooling zones for visualization"""

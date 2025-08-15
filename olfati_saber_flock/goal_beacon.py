@@ -119,6 +119,7 @@ class GoalBeaconSystem:
         self.logger = logger
         self.frame = 0  # will be set by caller each tick
         self._owner = None  # Back-reference to engine
+        self.completed_total = 0
         
         # Spawn all max_concurrent_beacons at initialization
         for i in range(self.max_concurrent_beacons):
@@ -248,6 +249,7 @@ class GoalBeaconSystem:
             if beacon.update():
                 active_beacons.append(beacon)
             else:
+                #self.completed_total += 1
                 freed_agents.update(beacon.get_trapped_agents())
                 if self.logger:
                     self.logger.log_event(
@@ -274,6 +276,7 @@ class GoalBeaconSystem:
             if success:
                 self.frames_since_last_spawn = 0
             # If spawn failed, don't reset timer - will try again next frame
+        #self.frame += 1
     
     def get_active_beacons(self):
         """Get list of active goal beacons for visualization"""

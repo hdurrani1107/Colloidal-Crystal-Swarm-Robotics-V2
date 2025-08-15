@@ -18,9 +18,9 @@ from matplotlib.animation import FuncAnimation
 import matplotlib.cm as cm
 from matplotlib.colors import Normalize
 from tqdm import tqdm
-from engine import multi_agent, init_melt
-import schedule
-from ui import setup_visualization, create_update_function, classify_state, state_colors
+from lj_swarm.engine import multi_agent, init_melt
+import lj_swarm.schedule as schedule
+from lj_swarm.ui import setup_visualization, create_update_function, classify_state, state_colors
 # from metrics import MetricsLogger  # Disabled metrics
 
 ##########################

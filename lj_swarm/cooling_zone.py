@@ -8,7 +8,7 @@
 
 import numpy as np
 from typing import Optional
-from metrics import MetricsLogger
+from lj_swarm.metrics import MetricsLogger
 
 class CoolingZone:
     _next_id = 0

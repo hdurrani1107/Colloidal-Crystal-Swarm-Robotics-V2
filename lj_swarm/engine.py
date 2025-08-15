@@ -10,7 +10,7 @@
 # Importing Libraries
 ##########################
 import numpy as np
-from cooling_zone import CoolingZoneSystem
+from lj_swarm.cooling_zone import CoolingZoneSystem
 
 ##########################
 # Multi-Agent Setup
@@ -104,7 +104,7 @@ class multi_agent:
     
     def setup_cooling_zones(self, zone_config):
         """Set up the cooling zone system"""
-        from cooling_zone import CoolingZoneSystem
+        from lj_swarm.cooling_zone import CoolingZoneSystem
         self.cooling_zones = CoolingZoneSystem(
             bounds=self.bounds,
             zone_radius=zone_config['zone_radius'],

@@ -9,7 +9,7 @@
 
 import numpy as np
 from typing import Optional
-from metrics import MetricsLogger
+from olfati_saber_flock.metrics import MetricsLogger
 
 class GoalBeacon:
     _next_id = 0
@@ -82,7 +82,7 @@ class GoalBeacon:
             return -c2_gamma * agent_vel
         
         # Olfati-Saber gamma force (attraction to beacon + velocity damping)
-        from engine import sigma_1
+        from olfati_saber_flock.engine import sigma_1
         pos_term = -c1_gamma * sigma_1(agent_pos - self.position)
         vel_term = -c2_gamma * agent_vel
         return pos_term + vel_term

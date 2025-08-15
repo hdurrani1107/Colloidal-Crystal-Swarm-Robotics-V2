@@ -19,10 +19,10 @@ from matplotlib.animation import FuncAnimation
 import matplotlib.cm as cm
 from matplotlib.colors import Normalize
 from tqdm import tqdm
-from engine import multi_agent
+from olfati_saber_flock.engine import multi_agent
 # import schedule  # Not needed for Olfati-Saber algorithm
-from ui import setup_visualization, create_update_function
-from metrics import MetricsLogger
+from olfati_saber_flock.ui import setup_visualization, create_update_function
+from olfati_saber_flock.metrics import MetricsLogger
 
 ##########################
 # Simulation Params

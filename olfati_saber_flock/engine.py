@@ -12,7 +12,7 @@
 # Importing Libraries
 ##########################
 import numpy as np
-from goal_beacon import GoalBeaconSystem
+from olfati_saber_flock.goal_beacon import GoalBeaconSystem
 
 ##########################
 # Core Math Functions - Olfati-Saber
@@ -297,7 +297,7 @@ class multi_agent:
 
     def setup_goal_beacons(self, beacon_config):
         """Set up the goal beacon system"""
-        from goal_beacon import GoalBeaconSystem
+        from olfati_saber_flock.goal_beacon import GoalBeaconSystem
         self.goal_beacons = GoalBeaconSystem(
             bounds=self.bounds,
             beacon_radius=beacon_config['beacon_radius'],

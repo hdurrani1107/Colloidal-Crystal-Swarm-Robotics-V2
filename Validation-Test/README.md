@@ -1,129 +1,70 @@
-# Validation Testing Framework
+# Simple Validation Test
 
 ## Overview
-This framework provides a comprehensive validation testing system to compare the performance of **LJ-Swarm** vs **Olfati-Saber-Flock** algorithms.
+This is a simple, effective validation script that compares LJ-Swarm vs Olfati-Saber-Flock performance using identical zone sequences.
 
-## Validation Metrics
-- **Total time to complete 10 goals/cooling-zones**
-- **Average time to complete 1 goal/beacon**
-
-## How It Works
-
-### 1. Goal Generation
-- Generates a predetermined set of 10 goal positions and radii for each trial
-- Both algorithms receive the **exact same** goal set for fair comparison
-- Goals are spawned following each algorithm's native spawning logic:
-  - Maximum 3 goals/zones active at once
-  - Fixed spawn interval after goal completion
-  - Position and radius from normal distribution
-
-### 2. Concurrent Execution
-- Both simulations run with identical goal sets
-- Each simulation follows its own physics and spawning rules
-- Simulations wait for each other to complete before starting next trial
-
-### 3. Data Collection
-- Records completion times for each goal
-- Calculates total simulation time and average time per goal
-- Saves individual trial data and generates comparison graphs
-
-## Files
-
-### Core Files
-- `validation_runner.py` - Main validation framework
-- `custom_systems.py` - Custom goal/zone systems for predetermined goal injection
-- `test_validation.py` - Quick test script (1 trial each)
-
-### Usage
-
-#### Quick Test (1 trial each)
-```bash
-cd Validation-Test
-python test_validation.py
-```
-
-#### Full Validation Study (10 trials each - default)
-```bash
-cd Validation-Test
-python validation_runner.py
-```
-
-#### Custom Number of Trials
-```bash
-cd Validation-Test
-python validation_runner.py 5  # Run 5 trials each
-```
-
-## Output Structure
-
-Results saved to: `../output/validation-test/`
-
-### Generated Files
-- `lj_swarm_trial_N.json` - Individual LJ-Swarm trial data
-- `olfati_saber_trial_N.json` - Individual Olfati-Saber trial data
-- `validation_comparison.png` - Comprehensive comparison graphs
-- `validation_summary.json` - Statistical summary and performance comparison
-
-### Analysis Graphs
-1. **Total completion time per trial** (line plot)
-2. **Average time per goal per trial** (line plot)  
-3. **Total completion time distribution** (box plots)
-4. **Average time per goal distribution** (box plots)
+## What it does
+1. **Generates** a random sequence of 10 zone positions and radii
+2. **Runs LJ-Swarm** simulation with these zones  
+3. **Runs Olfati-Saber-Flock** simulation with the same zones
+4. **Repeats** for 10 iterations
+5. **Creates graphs** comparing the two metrics:
+   - Total time to complete 10 zones/beacons
+   - Average time per zone/beacon
 
 ## Key Features
+✅ **Simple and effective** - Single script, easy to understand  
+✅ **Fair comparison** - Both simulations use identical zone sequences  
+✅ **Preserves physics** - No changes to core simulation logic  
+✅ **Automatic metrics** - Extracts performance data automatically  
+✅ **Visual results** - Creates comparison graphs and statistics  
 
-### Physics Preservation
-- ✅ Preserves all core physics for each algorithm
-- ✅ Maintains original spawning logic and parameters
-- ✅ Uses identical goal sets for fair comparison
+## Usage
 
-### Robust Testing
-- ✅ Handles simulation failures gracefully
-- ✅ Provides detailed error reporting
-- ✅ Reproducible results with seed-based goal generation
+### Run the validation
+```bash
+cd Validation-Test
+python validation.py
+```
 
-### Comprehensive Analysis
-- ✅ Statistical summaries (mean ± std)
-- ✅ Performance improvement percentages
-- ✅ Visual comparison graphs
-- ✅ Individual trial data preservation
+### What happens
+- The script runs 10 iterations automatically
+- Each iteration uses the same random zone sequence for both simulations
+- Results are saved to `../output/simple-validation/`
+- Comparison graphs are displayed and saved
+- Summary statistics are printed
+
+### Output Files
+- `validation_results.json` - Raw data from all iterations
+- `validation_comparison.png` - Comparison graphs
+- Console output with summary statistics
 
 ## Expected Runtime
-- **Quick test (1 trial each)**: ~2-5 minutes
-- **Full validation (10 trials each)**: ~20-50 minutes
-- Runtime depends on algorithm performance and goal completion speed
-
-## Validation Parameters
-
-### LJ-Swarm Parameters
-- 150 agents, σ=3.0, ε=3.0
-- Cooling zones: 10±1 radius, 1000 frame lifetime
-- Temperature: 150K (constant)
-
-### Olfati-Saber Parameters  
-- 150 agents, c1_γ=7, c2_γ=0.53 (Phase 1 tuning)
-- Goal beacons: 12±2 radius, 1000 frame lifetime
-- No temperature dependency
+- **Total time**: ~10-30 minutes (depends on simulation performance)
+- **Per iteration**: ~1-3 minutes each
+- **Progress**: Real-time updates shown during execution
 
 ## Results Interpretation
-
-### Performance Metrics
 - **Lower times = Better performance**
-- **Smaller standard deviation = More consistent**
-- **Success rate = Reliability measure**
+- **Graphs show**: Performance across iterations
+- **Statistics show**: Mean ± standard deviation for both algorithms
+- **Improvement percentages**: How much faster one algorithm is vs the other
 
-### Expected Outcomes
-Based on Phase 1 tuning, Olfati-Saber should show:
-- 2-3x faster goal completion
-- More consistent performance
-- Better scalability with multiple goals
+## Technical Details
 
-## Troubleshooting
+### Zone Generation
+- 10 zones per iteration with random positions and radii
+- Same sequence used for both LJ-Swarm and Olfati-Saber-Flock
+- Zones positioned with margin from boundaries to ensure valid placement
 
-### Common Issues
-1. **Import errors**: Ensure all parent folders (LJ-Swarm, Olfati-Saber-Flock) are present
-2. **Memory issues**: Reduce number of trials if system runs out of memory
-3. **Simulation hangs**: Check for infinite loops in algorithm implementations
+### Simulation Parameters
+- **LJ-Swarm**: 150 agents, σ=3.0, ε=3.0, constant temp=150K
+- **Olfati-Saber**: 150 agents, 3 flocks, goal beacon system
+- **Both**: 10 target zones, max 3 concurrent zones, 400 frame spawn interval
 
-### Debug Mode
-Add debug prints in `validation_runner.py` to monitor simulation progress and identify bottlenecks.
+### Metrics Collected
+1. **Total completion time**: Time to finish all 10 zones/beacons
+2. **Average time per zone**: Total time ÷ 10 zones
+
+## Previous System
+The old validation system has been moved to `old_validation_system/` folder. It was more complex but provided similar functionality.

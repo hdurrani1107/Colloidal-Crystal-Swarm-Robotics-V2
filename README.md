@@ -9,10 +9,12 @@ LJ-Swarm simulation package:
 - `ui.py` -> Matplotlib plot code
 - `engine.py` -> Engine Swarm Logic
 - `cooling_zone.py` -> Cooling zone system
+- `schedule.py` -> Global Temperature Schedules
 
 ### olfati_saber_flock/
 Olfati-Saber flocking simulation package:
 - `main.py` -> Run Olfati-Saber simulation from here
+- `ui.py` -> Matplotlib plot code
 - `engine.py` -> Flocking engine logic
 - `goal_beacon.py` -> Goal beacon system
 
@@ -25,3 +27,4 @@ Validation testing framework:
 - Clean up repository for un-used and redundant code
 - Potentially add some autonomous features to LJ-Swarm and validate back
 - Expand Validation Testing and test metrics
+- Insert a requirements.txt for dependencies

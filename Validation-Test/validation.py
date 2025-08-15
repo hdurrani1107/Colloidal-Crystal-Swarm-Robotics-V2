@@ -9,10 +9,12 @@
 # AI Disclosure: AI was used
 #################################################################################
 
+###########################
+# Importing Libraries
+###########################
 
 import matplotlib
 matplotlib.use("Agg")  # safe for headless
-
 import os
 import sys
 import json
@@ -34,18 +36,22 @@ from lj_swarm.cooling_zone import CoolingZone
 import olfati_saber_flock.engine as os_engine
 from olfati_saber_flock.goal_beacon import GoalBeacon
 
-# Output directory setup
+# Output directory setup for results
 OUTPUT_DIR = REPO_ROOT / "output" / "simple-validation"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
+###########################################################
+# Zone Data Class for passing list of positions and radii
+###########################################################
 class ZoneData:
-    """Simple zone data structure"""
     def __init__(self, position: Tuple[float, float], radius: float):
         self.position = position
         self.radius = radius
 
+############################
+# Store Validation Results
+############################
 class ValidationResults:
-    """Store validation results"""
     def __init__(self):
         self.lj_total_times = []
         self.lj_avg_times = []
@@ -53,8 +59,11 @@ class ValidationResults:
         self.os_avg_times = []
         self.iteration_data = []
 
+######################
+# Generat Random Zone 
+######################
+
 def generate_random_zones(num_zones=10, bounds=[0, 200], seed=None):
-    """Generate random zone positions and radii"""
     if seed is not None:
         np.random.seed(seed)
     
@@ -73,8 +82,11 @@ def generate_random_zones(num_zones=10, bounds=[0, 200], seed=None):
     
     return zones
 
+########################################
+# Initiates and runs LJ-Swarm Simulation
+########################################
+
 def run_lj_simulation(zones: List[ZoneData], trial_num: int):
-    """Run LJ-Swarm simulation with predetermined zones"""
     print(f"  Running LJ-Swarm trial {trial_num}...")
     
     try:
@@ -157,8 +169,11 @@ def run_lj_simulation(zones: List[ZoneData], trial_num: int):
         print(f"    LJ-Swarm failed: {e}")
         return float('inf'), float('inf'), False
 
+########################################
+# Initiate and Run OS-Flock Simulation
+########################################
+
 def run_olfati_simulation(zones: List[ZoneData], trial_num: int):
-    """Run Olfati-Saber-Flock simulation with predetermined zones"""
     print(f"  Running Olfati-Saber trial {trial_num}...")
     
     try:
@@ -192,7 +207,7 @@ def run_olfati_simulation(zones: List[ZoneData], trial_num: int):
             
             # Run simulation step
             external_forces = np.zeros((len(sim.agents), 2))
-            sim.update(external_forces, temp=0, frame=frame_count)
+            sim.update(external_forces, frame=frame_count)
 
             now_completed = sim.goal_beacons.completed_total
             delta = now_completed - prev_completed
@@ -235,8 +250,11 @@ def run_olfati_simulation(zones: List[ZoneData], trial_num: int):
         print(f"    Olfati-Saber failed: {e}")
         return float('inf'), float('inf'), False
 
+
+#########################################################
+# Re-Created Cooling Zone System to accept list of zones
+#########################################################
 class CustomCoolingZoneSystem:
-    """Simplified custom cooling zone system for predetermined zones"""
     
     def __init__(self, predetermined_zones: List[ZoneData]):
         self.predetermined_zones = predetermined_zones
@@ -253,8 +271,11 @@ class CustomCoolingZoneSystem:
         for i in range(min(self.max_concurrent_zones, len(self.predetermined_zones))):
             self._spawn_next_zone()
     
+    ################################################################################
+    # Spawns Next Zone when previous zone is complete and respawn condition is met
+    ################################################################################
+    
     def _spawn_next_zone(self):
-        """Spawn the next predetermined zone"""
         if self.current_zone_index >= len(self.predetermined_zones):
             return False
         
@@ -273,8 +294,11 @@ class CustomCoolingZoneSystem:
         self.current_zone_index += 1
         return True
     
+    ###################
+    # Process Agents
+    ###################
+    
     def process_agent(self, agent_idx, agent_pos, agent_vel):
-        """Process agent interaction with zones"""
         if agent_idx not in self.agent_zone_map:
             for zone in self.zones:
                 if zone.is_active and zone.is_inside(agent_pos):
@@ -282,8 +306,11 @@ class CustomCoolingZoneSystem:
                     self.agent_zone_map[agent_idx] = zone
                     break
     
+    ##############################
+    # Agent Trapped in Zone Check
+    ##############################
+    
     def is_agent_trapped(self, agent_idx):
-        """Check if agent is trapped"""
         if agent_idx in self.agent_zone_map:
             zone = self.agent_zone_map[agent_idx]
             return zone.is_active
@@ -515,14 +542,14 @@ def create_comparison_graphs(results: ValidationResults):
     avg_improvement = (lj_avg_mean - os_avg_mean) / lj_avg_mean * 100
     
     if total_improvement > 0:
-        print(f"🏆 Olfati-Saber is {total_improvement:.1f}% FASTER for total completion time")
+        print(f"Olfati-Saber is {total_improvement:.1f}% FASTER for total completion time")
     else:
-        print(f"🏆 LJ-Swarm is {-total_improvement:.1f}% FASTER for total completion time")
+        print(f"LJ-Swarm is {-total_improvement:.1f}% FASTER for total completion time")
     
     if avg_improvement > 0:
-        print(f"🏆 Olfati-Saber is {avg_improvement:.1f}% FASTER for average time per zone")
+        print(f"Olfati-Saber is {avg_improvement:.1f}% FASTER for average time per zone")
     else:
-        print(f"🏆 LJ-Swarm is {-avg_improvement:.1f}% FASTER for average time per zone")
+        print(f"LJ-Swarm is {-avg_improvement:.1f}% FASTER for average time per zone")
 
 def main():
     """Run the simple validation study"""

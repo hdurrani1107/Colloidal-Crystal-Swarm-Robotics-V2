@@ -47,7 +47,6 @@ goal_beacon_config = {
 target_beacons = 10  # User-configurable number of beacons to complete
 render_interval = 10  # Render every 10th frame for performance
 frame_count = 0
-dummy_temp = 0  # Dummy temperature value - not used by Olfati-Saber algorithm
 obstacles = [
 #    (np.array([75, 75]), 10),  # center sphere
 #    (np.array([30, 100]), 5),
@@ -81,7 +80,7 @@ norm = Normalize(vmin=0, vmax=50)
 scat.set_norm(norm)
 
 ##########################
-# Logging
+# Logging 
 ##########################
 beacon_completion_times = []  # Track when each beacon was completed
 beacon_completion_frames = []  # Track frame numbers when beacons completed
@@ -89,11 +88,10 @@ completed_beacons = 0
 frame_data = []  # Store frame data for video creation
 
 ##########################
-# Simulation Loop Functions
+# Captures Frame Data
 ##########################
 
 def capture_frame_data(frame):
-    """Capture frame data for video creation"""
     positions = sim.agents[:, :2].copy()
     colors = get_agent_colors(sim).copy()
     
@@ -115,8 +113,11 @@ def capture_frame_data(frame):
     frame_data.append(frame_info)
     return frame_info
 
+##########################
+# Updates Animation Frame
+##########################
+
 def update_animation(animation_frame):
-    """Animation function for FuncAnimation"""
     if animation_frame >= len(frame_data):
         return [scat, title] + beacon_circles
         
@@ -174,11 +175,10 @@ def update_animation(animation_frame):
     return [scat, title] + beacon_circles
 
 ##########################
-# Run Continuous Simulation
+# Sets Agent Colors
 ##########################
 
 def get_agent_colors(sim):
-    """Get colors for agents based on their flock membership"""
     n_agents = len(sim.agents)
     colors = np.zeros((n_agents, 3))  # RGB colors
     
@@ -195,7 +195,11 @@ def get_agent_colors(sim):
     
     return colors
 
+#Command Line Progress Bar
+
 pbar = tqdm(desc=f"Completing beacons (0/{target_beacons})", unit=" beacons")
+
+#While Loop Runs until Target Beacons met
 
 try:
     while completed_beacons < target_beacons:
@@ -204,7 +208,7 @@ try:
         
         # Run one simulation step
         external_forces = np.zeros((len(sim.agents), 2))
-        sim.update(external_forces, dummy_temp, frame_count)
+        sim.update(external_forces, frame_count)
         
         # Check for completed beacons
         beacons_after = len(sim.goal_beacons.beacons) if sim.goal_beacons else 0
@@ -226,6 +230,10 @@ try:
         if frame_count > 1000000:  # 1 million frame limit
             print(f"Simulation reached maximum frame limit. Completed {completed_beacons}/{target_beacons} beacons.")
             break
+
+#############################
+# Saves on Keyboard Interrupt
+############################# 
 
 except KeyboardInterrupt:
     print(f"\nSimulation interrupted by user at frame {frame_count}")
@@ -340,4 +348,4 @@ plt.show()
 if metrics:
     metrics.save()
     print(f"Saved metrics to {output_dir}/metrics/OS_metric")
-print("Olfati-Saber flocking simulation completed!")
+print("Olfati-Saber flocking simulation completed!") 

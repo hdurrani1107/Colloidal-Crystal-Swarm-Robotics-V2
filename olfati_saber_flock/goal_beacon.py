@@ -5,6 +5,7 @@
 # Adapted from cooling_zone.py for Olfati-Saber flocking simulation
 #
 # Author: Humzah Durrani
+# AI Disclosure: Debug and Handling
 #######################################################################
 
 import numpy as np
@@ -13,7 +14,7 @@ from olfati_saber_flock.metrics import MetricsLogger
 
 class GoalBeacon:
     _next_id = 0
-    def __init__(self, position, radius, base_lifetime, velocity_damping=0.985,
+    def __init__(self, position, radius, base_lifetime, velocity_damping=0.985, 
                  logger: Optional[MetricsLogger]=None):
         self.id = GoalBeacon._next_id; GoalBeacon._next_id += 1
         self.position = position

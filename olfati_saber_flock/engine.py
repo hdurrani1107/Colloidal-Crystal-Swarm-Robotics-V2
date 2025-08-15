@@ -20,7 +20,7 @@ from olfati_saber_flock.goal_beacon import GoalBeaconSystem
 #####################################
 
 def sigma_1(z):
-    """Smooths version of identity function that avoids singularities at 0"""
+    #Smooths version of identity function that avoids singularities at 0 Safely.
     if np.isscalar(z):
         return z / np.sqrt(1 + z ** 2)
     else:
@@ -29,7 +29,7 @@ def sigma_1(z):
         return z / np.sqrt(1 + safe_norm ** 2)
 
 def sigma_norm(z, eps=0.1):
-    """Used to compute distances with smooth behavior"""
+    #Used to compute distances with smooth behavior Safely.
     if np.isscalar(z):
         return (np.sqrt(1 + eps * z ** 2) - 1) / eps
     else:
@@ -37,7 +37,7 @@ def sigma_norm(z, eps=0.1):
         return (np.sqrt(1 + eps * norm_z ** 2) - 1) / eps
 
 def sigma_grad(z, eps=0.1):
-    """Gradient of sigma norm, to compute normalized direction vectors for force field"""
+    #Gradient of sigma norm, to compute normalized direction vectors for force field Safely.
     if np.isscalar(z):
         return z / np.sqrt(1 + eps * z ** 2)
     else:
@@ -46,12 +46,12 @@ def sigma_grad(z, eps=0.1):
         return z / np.sqrt(1 + eps * safe_norm ** 2)
 
 def phi(z, A=5, B=5):
-    """Base potential function"""
+    #Base Potential Function
     C = np.abs(A - B) / np.sqrt(4 * A * B)
     return ((A + B) * sigma_1(z + C) + (A - B)) / 2
 
 def bump_function(z, H=0.2):
-    """Smooths transition between 1 and 0 when z crosses threshold"""
+    #Smooths transition between 1 and 0 when z crosses threshold
     Ph = np.zeros_like(z)
     mask1 = z <= 1
     mask2 = z < H
@@ -63,13 +63,13 @@ def bump_function(z, H=0.2):
     return Ph
 
 def phi_alpha(z, R=12, D=10, eps=0.1):
-    """Function that uses bump function to restrict the range of interaction"""
+    #Function that uses bump function to restrict the range of interaction
     r_alpha = sigma_norm(R, eps)
     d_alpha = sigma_norm(D, eps)
     return bump_function(z / r_alpha) * phi(z - d_alpha)
 
 def influence(q_i, q_js, R=12, eps=0.1):
-    """Function for influence coefficients based on distance (velocity matching)"""
+    #Function for influence coefficients based on distance (velocity matching)
     r_alpha = sigma_norm(R, eps)
     if q_js.ndim == 1:
         distance = sigma_norm(np.linalg.norm(q_js - q_i), eps)
@@ -83,7 +83,7 @@ def influence(q_i, q_js, R=12, eps=0.1):
 ##########################
 
 def get_adj_mat(nodes, r, eps=0.1):
-    """Function that indicates whether two agents are within interaction range"""
+    #Adjacency Matrix
     n = len(nodes)
     adj = np.zeros((n, n), dtype=bool)
     for i in range(n):
@@ -94,14 +94,14 @@ def get_adj_mat(nodes, r, eps=0.1):
     return adj
 
 def local_dir(q_i, q_js, eps=0.1):
-    """Function to calculate direction vectors (agents to neighbors)"""
+    #Direction of agents to enighbors
     if q_js.ndim == 1:
         return sigma_grad(q_js - q_i, eps)
     else:
         return np.array([sigma_grad(q_j - q_i, eps) for q_j in q_js])
 
 def obs_rep(obstacles, agent_p, R_obs=10):
-    """Function to calculate repulsive forces from agents to obstacles"""
+    #Function to calculate repulsive forces from agents to obstacles
     u_obs = np.zeros(2)
     for obs in obstacles:
         d_vec = agent_p - obs[0]  # obs is (position, radius) tuple
@@ -114,12 +114,11 @@ def obs_rep(obstacles, agent_p, R_obs=10):
             u_obs += repulsion * (d_vec / (d_norm + 1e-3))
     return u_obs
 
-##########################
-# Multi-Agent Setup
-##########################
+###########################################################################
+# Initialize three separate lattice flocks in different areas of the space
+###########################################################################
 
 def init_three_flocks(number, bounds, spacing=6.0):
-    """Initialize three separate lattice flocks in different areas of the space"""
     agents_per_flock = number // 3
     remainder = number % 3
     
@@ -142,8 +141,11 @@ def init_three_flocks(number, bounds, spacing=6.0):
     
     return np.array(all_agents)
 
+###########################################################################
+# Initialize Agents in Hex Grid Pattern (For Validation)
+###########################################################################
+
 def init_proper_hex_grid(n, center, spacing):
-    """Initialize agents in proper hexagonal grid pattern (like LJ-Swarm)"""
     agents = []
     cols = int(np.sqrt(n))
     rows = int(np.ceil(n / cols))
@@ -175,8 +177,13 @@ def init_proper_hex_grid(n, center, spacing):
 
     return agents.tolist()
 
+
+####################
+# Multi-Agent Class
+####################
 class multi_agent:
     def __init__(self, number, sample_time, bounds, obstacles=None):
+        #Init Params
         self.dt = sample_time
         self.bounds = bounds
         self.obstacles = obstacles if obstacles else []
@@ -207,8 +214,12 @@ class multi_agent:
         self.r_alpha = sigma_norm(self.R, self.eps)
         self.d_alpha = sigma_norm(self.D, self.eps)
     
+
+    ###########################
+    # Set up 3 Distinct Flocks
+    ###########################
+
     def setup_three_flocks(self, number):
-        """Setup three distinct flocks with virtual leaders (centroids)"""
         agents_per_flock = number // 3
         remainder = number % 3
         
@@ -234,8 +245,11 @@ class multi_agent:
         print(f"Setup 3 flocks: {[len(agents) for agents in self.flocks.values()]} agents")
         print(f"Virtual leaders (centroids) will be computed dynamically")
     
+    ############################################
+    # Update Virtual Leaders Position (Centroid)
+    ############################################
+    
     def update_virtual_leaders(self):
-        """Update virtual leader positions (centroids of each flock)"""
         for flock_id, agent_indices in self.flocks.items():
             if len(agent_indices) > 0:
                 flock_positions = self.agents[agent_indices, :2]
@@ -244,8 +258,11 @@ class multi_agent:
             else:
                 self.virtual_leaders[flock_id] = np.array([0.0, 0.0])
     
+    #############################################################
+    # Find closest beacon to individual flocks leader (centroid)
+    #############################################################
+    
     def get_closest_beacon_for_flock(self, flock_id):
-        """Find the closest active goal beacon to a flock's virtual leader"""
         if not self.goal_beacons or len(self.goal_beacons.beacons) == 0:
             return None
             
@@ -262,12 +279,18 @@ class multi_agent:
                     
         return closest_beacon
     
+    ###################
+    # Pull Agent Flock
+    ###################
+
     def get_agent_flock(self, agent_idx):
-        """Get which flock an agent belongs to"""
         return self.agent_flock_ids[agent_idx]
     
+    #############################
+    # Compute Goal Force  
+    #############################   
+
     def compute_gamma_forces(self):
-        """Compute gamma forces (virtual leader attraction) for each flock"""
         n = len(self.agents)
         forces = np.zeros((n, 2))
         
@@ -296,6 +319,10 @@ class multi_agent:
         
         return forces
 
+    #############################
+    # Setup Goal Beacons
+    ############################# 
+
     def setup_goal_beacons(self, beacon_config):
         self.goal_beacons = GoalBeaconSystem(
             bounds=self.bounds,
@@ -307,8 +334,11 @@ class multi_agent:
         )
         self.goal_beacons._owner = self
     
+    
+    #############################
+    # Compute Alpha Flocking Force
+    ############################# 
     def compute_flocking_forces(self):
-        """Compute Olfati-Saber alpha forces for lattice formation within each flock"""
         n = len(self.agents)
         forces = np.zeros((n, 2))
         
@@ -358,8 +388,12 @@ class multi_agent:
         
         return forces
     
+    #############################
+    # Inter-Flock Repulsion 
+    ############################# 
+    
     def compute_inter_flock_repulsion(self):
-        """Compute repulsion between agents from different flocks"""
+        #THIS DOES NOT WORK
         n = len(self.agents)
         forces = np.zeros((n, 2))
         repulsion_range = 25.0  # Range for inter-flock repulsion
@@ -386,8 +420,12 @@ class multi_agent:
         
         return forces
     
+    #############################
+    # Compute Obstacle Force  
+    ############################# 
+
     def compute_obstacle_forces(self):
-        """Compute repulsive forces from obstacles"""
+        #Toggled Off for now
         n = len(self.agents)
         forces = np.zeros((n, 2))
         
@@ -398,8 +436,12 @@ class multi_agent:
         
         return forces
     
-    def update(self, external_forces, temp=None, frame=0):
-        """Update agent positions and velocities using Olfati-Saber algorithm"""
+    #############################
+    # Update Flock 
+    ############################# 
+    
+    def update(self, external_forces, frame=0):
+        
         n = len(self.agents)
         
         # Update goal beacons first

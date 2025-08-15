@@ -3,8 +3,9 @@
 #
 # Visualization for Olfati-Saber flocking simulation
 # Adapted from LJ-Swarm ui.py
-#
+# 
 # Author: Humzah Durrani
+# AI Disclosure: Debugging and Handling
 #######################################################################
 
 ##########################
@@ -27,17 +28,14 @@ flock_colors = np.array([
     [0.2, 0.2, 1.0]    # Flock 3: blue
 ])
 
-leader_color = np.array([1.0, 1.0, 0.0])  # Leaders: yellow
+#OLD CODE
+#leader_color = np.array([1.0, 1.0, 0.0])  # Leaders: yellow
 
 ############################
-# Classify States based on Velocity and Neighbor Count
+# Get Agent Colors
 ############################
 
 def get_agent_colors(sim):
-    """
-    Get colors for all agents based on their flock membership
-    Flock 0: Red, Flock 1: Green, Flock 2: Blue
-    """
     n = len(sim.agents)
     colors = np.zeros((n, 3))
     
@@ -76,7 +74,7 @@ def setup_visualization(bounds, obstacles):
     return fig, ax, scat, quiver, title, beacon_circles
 
 ############################
-# Updates entire frame
+# Updates frame
 ############################
 
 def create_update_function(sim, temperature_schedule, sample_time, sigma, epsilon, distance, c1_gamma, c2_gamma, alpha,
@@ -85,14 +83,16 @@ def create_update_function(sim, temperature_schedule, sample_time, sigma, epsilo
     counter = [0]
     # current_quiver disabled - no force arrows
 
+
+    #Pulled from LJ-SWARM. OS Does not use Temperature
     def compute_kinetic_temperature(agents, mass=1, kB=1):
         velocities = agents[:, 2:]
         KE_total = 0.5 * mass * np.sum(velocities**2)
         N = len(agents)
         return KE_total / (N * kB)
     
+
     def compute_neighbor_counts(agents, R=12):
-        """Compute number of neighbors for each agent"""
         positions = agents[:, :2]
         n = len(agents)
         neighbor_counts = np.zeros(n, dtype=int)
@@ -120,7 +120,7 @@ def create_update_function(sim, temperature_schedule, sample_time, sigma, epsilo
             velocities = sim.agents[:, 2:]
             colors = get_agent_colors(sim)
             
-            # Log initial state
+            # Log initial state (OBSOLETE)
             T_kin = compute_kinetic_temperature(sim.agents)
             kinetic_temperatures.append(T_kin)
             time_log.append(0)
@@ -132,6 +132,8 @@ def create_update_function(sim, temperature_schedule, sample_time, sigma, epsilo
                 total_trapped = int(np.sum(trapped_counts)) if trapped_counts else 0
                 mean_trapped = float(np.mean(trapped_counts)) if trapped_counts else 0.0
 
+                #Redundant
+                #Clean Up Metrics
                 metrics.log_frame(
                     frame=0,
                     t=0.0,
@@ -154,7 +156,7 @@ def create_update_function(sim, temperature_schedule, sample_time, sigma, epsilo
                 external_forces = np.zeros((len(sim.agents), 2))
                 sim.update(external_forces, temp)
                 
-                # Log data every simulation step
+                # OBSOLETE (Bad Coding Practice)
                 T_kin = compute_kinetic_temperature(sim.agents)
                 if T_kin >= 1e18:
                     print("Simulation Destabilized")
@@ -172,7 +174,9 @@ def create_update_function(sim, temperature_schedule, sample_time, sigma, epsilo
                     prev_total = getattr(sim.goal_beacons, f"_prev_total_trapped_{actual_frame-1}", 0)
                     arrivals_this_frame = max(0, total_trapped - prev_total)
                     setattr(sim.goal_beacons, f"_prev_total_trapped_{actual_frame}", total_trapped)
-
+                
+                    #Redundant
+                    #Clean Up Metrics
                     metrics.log_frame(
                         frame=int(actual_frame),
                         t=float(actual_frame * sample_time),
@@ -196,7 +200,7 @@ def create_update_function(sim, temperature_schedule, sample_time, sigma, epsilo
                 external_forces = np.zeros((len(sim.agents), 2))
                 sim.update(external_forces, temp, actual_frame)
                 
-                # Log data every simulation step
+                # OBSOLETE (Bad Coding Practice)
                 T_kin = compute_kinetic_temperature(sim.agents)
                 if T_kin >= 1e18:
                     print("Simulation Destabilized")
@@ -215,6 +219,8 @@ def create_update_function(sim, temperature_schedule, sample_time, sigma, epsilo
                     arrivals_this_frame = max(0, total_trapped - prev_total)
                     setattr(sim.goal_beacons, f"_prev_total_trapped_{actual_frame}", total_trapped)
 
+                    #Redundant
+                    #Clean Up Metrics
                     metrics.log_frame(
                         frame=int(actual_frame),
                         t=float(actual_frame * sample_time),

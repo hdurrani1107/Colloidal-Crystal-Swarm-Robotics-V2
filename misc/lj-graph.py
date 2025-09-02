@@ -1,9 +1,22 @@
+#######################################################################
+# lj_graph.py
+#
+# Made my own graph to display the Lennard-Jones Potential
+#
+# Author: Humzah Durrani
+#######################################################################
+
+##########################
+# Importing Libraries
+##########################
+
 import numpy as np
 import matplotlib
 import matplotlib.pyplot as plt
 
 
 def function1():
+    #Parameters
     sigma = 3
     epsilon = 10
     rmin = 2**(1/6)
@@ -42,19 +55,20 @@ def function1():
     plt.show()
 
 def function2():
-        # Parameters
+    
+    # Parameters
     sigma = 10.0
     epsilon = 10.0
 
-    # Reduced coordinate r* = r/sigma
+    #Reduced coordinate r* = r/sigma
     rstar = np.linspace(0.8, 4.0, 1000)           # covers repulsive + attractive
     inv = 1.0 / rstar
 
-    # Reduced potential and force (dimensionless)
+    #Reduced potential and force (dimensionless)
     Vstar = 4 * (inv**12 - inv**6)                # V / epsilon
     Fstar = 24 * (2*inv**12 - inv**6) / rstar     # F / (epsilon/sigma)
 
-    # Physical r and scalings if you prefer dimensional axes/values
+    #Physical r and scalings if you prefer dimensional axes/values
     r = rstar * sigma
     V = epsilon * Vstar
     F = (epsilon / sigma) * Fstar
@@ -62,7 +76,7 @@ def function2():
     rmin = 2**(1/6)        # in reduced units
     rmin_dim = rmin * sigma
 
-    # --- Plot 1: Force (dimensionless) ---
+    #Plot 1: Force (dimensionless)
     plt.figure(figsize=(8,5))
     plt.plot(rstar, Fstar, lw=2, label="Force $F/(\epsilon/\\sigma)$")
     plt.axhline(0, ls=':', alpha=0.8)
@@ -75,7 +89,7 @@ def function2():
     plt.tight_layout()
     plt.show()
 
-    # --- Plot 2: Potential (dimensionless) ---
+    #Plot 2: Potential (dimensionless)
     plt.figure(figsize=(8,5))
     plt.plot(rstar, Vstar, lw=2, label="Potential $V/\\epsilon$")
     plt.axhline(-1, ls=':', alpha=0.8, label="Well depth $V/\\epsilon=-1$")
@@ -88,6 +102,7 @@ def function2():
     plt.show()
 
 
+#Function 2 works
 function2()
 
 
